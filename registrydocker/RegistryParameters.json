@@ -1,0 +1,5 @@
+{
+	"ADDRESS": "172.30.0.12:4048",
+	"DATABASE": "/db/database.db",
+	"MAXCONNECTIONS": 8
+ }

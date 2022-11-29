@@ -1,0 +1,5 @@
+{
+	"ADDRESS": "172.30.0.13:5050",
+	"DATABASE": "weatherDB.db",
+	"MAXCONNECTIONS": 8
+ }

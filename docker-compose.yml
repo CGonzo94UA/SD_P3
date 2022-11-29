@@ -1,0 +1,106 @@
+version: '2'
+
+networks:
+  againstall:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+      driver: default
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
+    networks:
+      againstall:
+        ipv4_address: 172.30.0.10
+        aliases:
+          - zookeeper
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://172.30.0.11:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      againstall:
+        ipv4_address: 172.30.0.11
+        aliases:
+          - kafka
+  
+  aa_registry:
+    build: ./registrydocker
+    stdin_open: true
+    tty: true
+    networks:
+      againstall:
+        ipv4_address: 172.30.0.12
+        aliases:
+          - aa_registry
+    volumes: 
+      - database-volume:/db/   
+
+  aa_weather:
+    build: ./weatherdocker
+    stdin_open: true
+    tty: true
+    networks:
+      againstall:
+        ipv4_address: 172.30.0.13
+        aliases:
+          - aa_weather
+
+  aa_engine:
+    build: ./enginedocker
+    depends_on:
+      - kafka
+      - aa_weather
+    stdin_open: true
+    tty: true
+    networks:
+      againstall:
+        ipv4_address: 172.30.0.14
+        aliases:
+          - aa_engine
+    volumes: 
+      - database-volume:/db/
+    
+  aa_npc:
+    build: ./npcdocker
+    depends_on:
+      - kafka
+    stdin_open: true
+    tty: true
+    networks:
+      againstall:
+        ipv4_address: 172.30.0.15
+        aliases:
+          - aa_npc
+
+  aa_player:
+    build: ./playerdocker
+    depends_on:
+      - kafka
+    stdin_open: true
+    tty: true
+    networks:
+      againstall:
+        ipv4_address: 172.30.0.16
+        aliases:
+          - aa_player
+
+volumes:
+  database-volume:
