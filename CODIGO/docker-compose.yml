@@ -1,0 +1,81 @@
+version: '2'
+
+networks:
+  againstall:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.50.0.0/16
+      driver: default
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
+    networks:
+      againstall:
+        ipv4_address: 172.50.0.10
+        aliases:
+          - zookeeper
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      againstall:
+        ipv4_address: 172.50.0.11
+        aliases:
+          - kafka
+  mysql:
+    image: mysql:8.0
+    cap_add:
+      - SYS_NICE
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'againstall'
+      MYSQL_USER: 'clara'
+      MYSQL_PASSWORD: 'sd2022'
+      MYSQL_ROOT_PASSWORD: 'sd2022'
+    ports:
+      - 3307:3307
+    expose:
+      - 3306
+    volumes:
+      - mysql:/var/lib/mysql:rw
+      - mysql_config:/etc/mysql:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      againstall:
+        ipv4_address: 172.50.0.12
+        aliases:
+          - mysql
+  adminer:
+    image: adminer
+    restart: always
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    ports:
+      - 8080:8080
+    networks:
+      againstall:
+        ipv4_address: 172.50.0.16
+        aliases:
+          - adminer
+
+volumes:
+  mysql:
+  mysql_config:
