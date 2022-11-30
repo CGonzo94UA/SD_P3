@@ -10,7 +10,9 @@ import time
 import threading
 import socket
 import mysql.connector
+import numpy
 from mysql.connector import errorcode
+import requests
 
 from kafka import KafkaConsumer, KafkaProducer
 
@@ -28,6 +30,7 @@ global PWDDB
 global DBIP
 global DBPORT
 global config
+global API_KEY
 
 HEADER = 10
 SEPARADOR = '#'
@@ -836,33 +839,27 @@ def communication(client, message) -> str:
     return respuesta
 
 
-def requestcities(ip, port):
+def requestcities():
+    # leer lista de ciudades
     global CITIES
-    numbers = []  # lista de numeros para comprobar que no se repiten
-    counter = 0
-    while counter < 4:
-        n = random.randint(1, 20)
-        if n not in numbers:
-            numbers.append(n)
-            try:
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.connect((ip, port))
-                msg = f"{n}"
-                ret = communication(client, msg)
-                if ret == 'Error':
-                    logging.error("It is not possible to get the city")
-                else:
-                    datos = ret.split(':')
-                    ciudad = datos[0]
-                    temperatura = datos[1]
-                    CITIES[ciudad] = temperatura
-                    counter += 1
+    try:
+        with open("Cities.txt", "r") as read_file:
+            logging.info("Converting txt encoded data into Python list")
+            listcities = numpy.loadtxt(read_file, dtype="str", delimiter="\n")
+            logging.info(str(listcities))
+    except Exception as e:
+        logging.error(f'ERROR reading list: {e}')
+        exit()
 
-            except Exception as e:
-                logging.error('ERROR requesting the city')
-            finally:
-                if 'client' in locals():
-                    client.close()
+    while len(CITIES) < 4:
+        n = random.randint(0, 19)
+        askCity = listcities[n]
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={askCity}&appid={API_KEY}"
+        response = requests.get(url)
+        data = json.loads(response.text)
+        temp = data["main"]["temp"] - 273.15
+        CITIES[askCity] = temp
+
     logging.info(CITIES)
 
 
@@ -1089,6 +1086,8 @@ if __name__ == '__main__':
     DBIP = dbserver[0]
     DBPORT = int(dbserver[1])
 
+    API_KEY = parameters["APIKEY"]
+
     config = {
         'user': USERDB,
         'password': PWDDB,
@@ -1130,7 +1129,7 @@ if __name__ == '__main__':
             MAPA = [[' ' for _ in range(20)] for _ in range(20)]
             PLAYERS = {}  # dictionary con los jugadores
             CITIES = {}
-            requestcities(ip_w, port_w)
+            requestcities()
             assigncitytoquadrant()
 
             # Genera los alimentos y las minas del mapa
