@@ -14,6 +14,8 @@ import re
 from datetime import datetime
 import hashlib
 import os
+import ssl
+from flask import Flask, jsonify, request
 
 global IP
 global PORT
@@ -28,12 +30,102 @@ global config
 HEADER = 10
 current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
-
 logging.basicConfig(
     filename="Registry.log",
     format='%(asctime)s - %(message)s',
     filemode='w',
     level=logging.DEBUG)
+
+
+class APIManager(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        app = Flask(__name__)
+
+
+class SocketManager(threading.Thread):
+    def __init__(self, ip, port):
+        threading.Thread.__init__(self)
+
+        try:
+            self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server.bind((ip, port))
+            logging.debug(f'Socket binded to {ip}:{port}')
+        except Exception as e:
+            logging.error(f'ERROR BINDING {ip}:{port} - {e}')
+
+    def handle_client(self, connection, address):
+        res = False
+        logging.debug(f"NEW CONNECTION: {address}")
+
+        c_length = int(connection.recv(HEADER))
+        credentials = connection.recv(c_length).decode()
+
+        logging.debug(f"Received: {credentials}")
+        data = credentials.split(":")
+        operation = data[0]
+
+        # Registry - Registrar
+        if operation.upper() == 'R':
+            alias = data[1]
+            passwd = data[2]
+            logging.info(f"{address[0]} - REGISTRY - PARAMETERS alias: {alias} passwd: {passwd}")
+            res = sign(alias, passwd)
+        # Update - Actualizar
+        elif operation.upper() == 'U':
+            alias = data[1]
+            n_alias = data[2]
+            n_passwd = data[3]
+            logging.info(f"{address[0]} - UPDATE profile of player: {alias}")
+            res = modify(alias, n_alias, n_passwd)
+        elif operation.upper() == 'L':
+            alias = data[1]
+            passwd = data[2]
+            logging.info(f"{address[0]} - LOGIN for update - alias: " + alias + " passwd: " + passwd)
+            res = login(alias, passwd)
+        if res:
+            connection.send(b'ok')
+        else:
+            logging.error(f"{address[0]} - ERROR: IT IS NOT POSSIBLE TO REGISTER OR UPDATE: ")
+            connection.send(b'no')
+        connection.close()
+
+    def run(self):
+        print("AA_Registry started")
+        print(f"LISTENING TO {IP}:{PORT}")
+        self.server.listen()
+        logging.debug("AA_Registry started")
+        logging.debug(f"LISTENING TO {IP}:{PORT}")
+        n_connections = threading.active_count() - 1
+        logging.debug(f"CURRENT CONNECTIONS: {n_connections}")
+
+        # Wrap the server socket in an SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        context.load_cert_chain(certfile="certRegistry.pem", keyfile="certRegistry.pem")
+        # context.verify_mode = ssl.CERT_REQUIRED
+        # context.load_verify_locations(cafile=client_certs)
+        secure_server_socket = context.wrap_socket(self.server, server_side=True)
+
+        while True:
+            try:
+                conn, addr = secure_server_socket.accept()
+                n_connections = threading.active_count()
+                if n_connections >= MAXCONNECTIONS:
+                    logging.error(f"{addr} - CONNECTION - ERROR: MAX CONNECTIONS REACHED")
+                    print("MAX CONNECTIONS REACHED")
+                    conn.send(b"THE SERVER HAS EXCEEDED THE LIMIT OF CONNECTIONS")
+                    conn.close()
+                    n_connections = threading.active_count() - 1
+                else:
+                    thread = threading.Thread(target=self.handle_client, args=(conn, addr))
+                    thread.start()
+                    logging.debug("Connection has been established: " + addr[0] + ":" + str(addr[1]))
+                    logging.debug(f"[ACTIVE CONNECTIONS] {n_connections}")
+                    logging.debug(f"REMAINING CONNECTIONS: {MAXCONNECTIONS - n_connections}")
+
+            except Exception as exc:
+                logging.error(f"Error accepting connections: {exc}")
+
 
 def sign(ali: str, psw: str) -> bool:
     """
@@ -44,7 +136,7 @@ def sign(ali: str, psw: str) -> bool:
 
     result = False
 
-    # Generate 16 random bytes
+    # Generate 32 random bytes
     salt = os.urandom(32)
     hashed_password = hashlib.pbkdf2_hmac('sha256', psw.encode(), salt, 10000)
 
@@ -83,20 +175,22 @@ def login(ali, psw) -> bool:
         args = (ali,)
         cur.execute(sentence, args)
         query = cur.fetchone()
-        hashed_password_hex = query[0]
-        salt = binascii.unhexlify(query[1])
+        if query:
+            hashed_password_hex = query[0]
+            salt = binascii.unhexlify(query[1])
 
-        # Hash the salted password with SHA-256
-        hashed_entered_password = hashlib.pbkdf2_hmac('sha256', psw.encode(), salt, 10000)
-        hashed_password = binascii.unhexlify(hashed_password_hex)
+            # Hash the salted password with SHA-256
+            hashed_entered_password = hashlib.pbkdf2_hmac('sha256', psw.encode(), salt, 10000)
+            hashed_password = binascii.unhexlify(hashed_password_hex)
 
-        if hashed_entered_password == hashed_password:
-            logging.debug('Password is correct')
-            result = True
+            if hashed_entered_password == hashed_password:
+                logging.debug('Password is correct')
+                result = True
+            else:
+                logging.debug('Password is incorrect')
+                result = False
         else:
-            logging.debug('Password is incorrect')
             result = False
-
     except mysql.connector.Error as err:
         result = False
         con.close()
@@ -155,70 +249,50 @@ def modify(alias, n_alias, n_passwd) -> bool:
         return result
 
 
-def handle_client(connection, address):
-    res = False
-    logging.debug(f"NEW CONNECTION: {address}")
+@app.route('/update', methods=['POST'])
+def api_update():
+    alias = request.form['alias']
+    pwd = request.form['pwd']
+    n_alias = request.json['n_alias']
+    n_passwd = request.form['n_pwd']
+    # Check if user and passwords are correct
+    if check_alias(alias) and check_alias(n_alias):
+        result = login(alias, pwd)
+        if result:
+            res = modify(alias, n_alias, n_passwd)
 
-    c_length = int(connection.recv(HEADER))
-    credentials = connection.recv(c_length).decode()
-
-    logging.debug(f"Received: {credentials}")
-    data = credentials.split(":")
-    operation = data[0]
-
-    # Registry - Registrar
-    if operation.upper() == 'R':
-        alias = data[1]
-        passwd = data[2]
-        logging.info(f"{address[0]} - REGISTRY - PARAMETERS alias: {alias} passwd: {passwd}")
-        res = sign(alias, passwd)
-    # Update - Actualizar
-    elif operation.upper() == 'U':
-        alias = data[1]
-        n_alias = data[2]
-        n_passwd = data[3]
-        logging.info(f"{address[0]} - UPDATE profile of player: {alias}")
-        res = modify(alias, n_alias, n_passwd)
-    elif operation.upper() == 'L':
-        alias = data[1]
-        passwd = data[2]
-        logging.info(f"{address[0]} - LOGIN for update - alias: " + alias + " passwd: " + passwd)
-        res = login(alias, passwd)
-    if res:
-        connection.send(b'ok')
-    else:
-        logging.error(f"{address[0]} - ERROR: IT IS NOT POSSIBLE TO REGISTER OR UPDATE: ")
-        connection.send(b'no')
-    connection.close()
-
-
-def start(server):
-    print("AA_Registry started")
-    print(f"LISTENING TO {IP}:{PORT}")
-    server.listen()
-    logging.debug("AA_Registry started")
-    logging.debug(f"LISTENING TO {IP}:{PORT}")
-    n_connections = threading.active_count() - 1
-    logging.debug(f"CURRENT CONNECTIONS: {n_connections}")
-    while True:
-        try:
-            conn, addr = server.accept()
-            n_connections = threading.active_count()
-            if n_connections >= MAXCONNECTIONS:
-                logging.error(f"{addr} - CONNECTION - ERROR: MAX CONNECTIONS REACHED")
-                print("MAX CONNECTIONS REACHED")
-                conn.send(b"THE SERVER HAS EXCEEDED THE LIMIT OF CONNECTIONS")
-                conn.close()
-                n_connections = threading.active_count() - 1
+            if res:
+                return jsonify({'mensaje': "UPDATED SUCCESSFULLY", 'result': True})
             else:
-                thread = threading.Thread(target=handle_client, args=(conn, addr))
-                thread.start()
-                logging.debug("Connection has been established: " + addr[0] + ":" + str(addr[1]))
-                logging.debug(f"[ACTIVE CONNECTIONS] {n_connections}")
-                logging.debug(f"REMAINING CONNECTIONS: {MAXCONNECTIONS - n_connections}")
+                return jsonify({'mensaje': "ERROR UPDATING", 'result': False})
+        else:
+            return jsonify({'mensaje': "ERROR UPDATING", 'result': False})
 
-        except Exception as exc:
-            logging.error(f"Error accepting connections: {exc}")
+    else:
+        return jsonify({'mensaje': "Wrong parameters", 'result': False})
+
+
+
+@app.route('/register', methods=['POST'])
+def api_register():
+    # print(request.json)
+    ali = request.json['alias']
+    pwd = request.json['pwd']
+    if check_alias(ali):
+        res = sign(ali, pwd)
+
+        if res:
+            return jsonify({'mensaje': "REGISTERED SUCCESSFULLY", 'result': True})
+        else:
+            return jsonify({'mensaje': "ERROR REGISTERING", 'result': False})
+    else:
+        return jsonify({'mensaje': "Wrong parameters", 'result': False})
+
+
+# Checks if the name is correct (text without blank spaces, between 1 and 30 characters).
+def check_alias(name: str) -> bool:
+    name = name.strip()
+    return len(name) > 0 and len(name) <= 30
 
 
 def checkargs(address, numconnections, bdadress) -> bool:
@@ -288,12 +362,9 @@ if __name__ == '__main__':
         'raise_on_warnings': True
     }
 
-    serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    serversocket.bind((IP, PORT))
-    logging.debug('Socket binded to ' + IP + ":" + str(PORT))
-    try:
-        start(serversocket)
-    except Exception as e:
-        logging.error(f"ERROR: {e}")
-    finally:
-        serversocket.close()
+    # Hilos que ejecuta Registry: hilos para sockets, hilo para api
+    socket = SocketManager(IP, PORT)
+    api = APIManager()
+
+    socket.start()
+    api.start()

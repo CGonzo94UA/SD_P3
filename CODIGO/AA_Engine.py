@@ -188,8 +188,7 @@ class LoginManager(threading.Thread):
                     logging.info(f"REMAINING CONNECTIONS: {MAX_CONNECTIONS - n_connections}")
 
             except Exception as exc:
-                logging.error('Error accepting connections')
-                logging.error('ERROR: ', exc)
+                logging.error(f"Error accepting connections: {exc}")
 
 
 def updatemap():
@@ -859,9 +858,9 @@ def requestcities():
     global CITIES
     try:
         with open("Cities.txt", "r") as read_file:
-            logging.info("Converting txt encoded data into Python list")
+            logging.debug("Converting txt encoded data into Python list")
             listcities = numpy.loadtxt(read_file, dtype="str", delimiter="\n")
-            logging.info(str(listcities))
+            logging.debug(str(listcities))
     except Exception as e:
         logging.error(f'ERROR reading list: {e}')
         exit()
@@ -1029,13 +1028,13 @@ def checkargs(engine, numplayers, mysql, kafka) -> bool:
         return False
 
     if not (re.match(regex_1, dbaddress) or re.match(regex_2, dbaddress)):
-        print("Wrong Weather address")
-        logging.error("Wrong Engine address")
+        print("Wrong MySQL address")
+        logging.error("Wrong MySQL address")
         return False
 
     if not (re.match(regex_1, karfkaaddress) or re.match(regex_2, karfkaaddress)):
         print("Wrong Kafka address")
-        logging.error("Wrong Engine address")
+        logging.error("Wrong Kafka address")
         return False
 
     return True
@@ -1079,10 +1078,6 @@ if __name__ == '__main__':
     MAXPLAYERS = parameters["MAXPLAYERS"]
 
     logging.info('MAX PLAYERS: ' + str(MAXPLAYERS))
-
-    weatherdir = parameters["WEATHER"].split(':')
-    ip_w = weatherdir[0]
-    port_w = int(weatherdir[1])
 
     kafkadir = parameters["KAFKA"].split(":")
     ip_k = kafkadir[0]
