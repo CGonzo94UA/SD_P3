@@ -220,9 +220,12 @@ def signinplayer(ip, port):
         if ret == 'ok':
             print("REGISTERED SUCCESSFULLY")
             logging.info("REGISTERED SUCCESSFULLY")
-        else:
+        elif ret == 'exists':
             print("ERROR REGISTERING, player already exists")
             logging.error("ERROR REGISTERING, player already exists")
+        else:
+            print("ERROR REGISTERING")
+            logging.error("ERROR REGISTERING")
     except Exception as e:
         logging.error(f'ERROR registering: {e}')
         print("It is not possible to sign in. Try again later.")
@@ -276,7 +279,7 @@ def updateplayer(ip, port) -> bool:
 def menu():
     print("R - Sign in: Create player profile")
     print("U - Update: Update your profile")
-    print("L - Login:  Join a game")
+    print("L - Login: Join a game")
     print("Q - Quit")
 
 

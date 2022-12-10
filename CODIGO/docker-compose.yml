@@ -55,7 +55,6 @@ services:
     expose:
       - 3306
     volumes:
-      - mysql:/var/lib/mysql:rw
       - mysql_config:/etc/mysql:ro
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:

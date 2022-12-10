@@ -2,6 +2,8 @@
     Clara Gonzalez
     Modulo de principal del programa.
 """
+import binascii
+import hashlib
 import json
 import logging
 import random
@@ -87,19 +89,32 @@ class LoginManager(threading.Thread):
             logging.error(f'ERROR BINDING {ip}:{port}', e)
 
     def login(self, ali, psw) -> bool:
-        res = False
+        result = False
+
         try:
             con = mysql.connector.connect(**config)
             cur = con.cursor()
-            sentence = "SELECT alias, passwd FROM player WHERE alias = %s AND passwd = %s;"
-            args = (ali, psw)
+            sentence = "SELECT passwd, salt FROM Player WHERE alias = %s;"
+            args = (ali,)
             cur.execute(sentence, args)
-            query = cur.fetchall()
-            res = len(query) != 0
-            con.close()
+            query = cur.fetchone()
+            hashed_password_hex = query[0]
+            salt = binascii.unhexlify(query[1])
+
+            # Hash the salted password with SHA-256
+            hashed_entered_password = hashlib.pbkdf2_hmac('sha256', psw.encode(), salt, 10000)
+            hashed_password = binascii.unhexlify(hashed_password_hex)
+
+            if hashed_entered_password == hashed_password:
+                logging.debug('Password is correct')
+                result = True
+            else:
+                logging.debug('Password is incorrect')
+                result = False
 
         except mysql.connector.Error as err:
-            res = False
+            result = False
+            con.close()
             if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
                 logging.error("Something is wrong with your user name or password")
             elif err.errno == errorcode.ER_BAD_DB_ERROR:
@@ -110,7 +125,7 @@ class LoginManager(threading.Thread):
             con.close()
 
         finally:
-            return res
+            return result
 
     def handle_client(self, connection, address):
         logging.info(f"NEW CONNECTION: {address}")

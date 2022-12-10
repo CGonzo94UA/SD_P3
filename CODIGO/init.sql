@@ -1,7 +1,9 @@
-USE `againstall`;
+
+USE againstall;
 
 CREATE TABLE IF NOT EXISTS Player (alias VARCHAR(30) PRIMARY KEY,
-                passwd VARCHAR(30) NOT NULL,
+                passwd VARCHAR(64) NOT NULL,
+                salt VARCHAR(64) NOT NULL,
                 nivel TINYINT DEFAULT 0,
                 EF TINYINT DEFAULT 0,
                 EC TINYINT DEFAULT 0,
