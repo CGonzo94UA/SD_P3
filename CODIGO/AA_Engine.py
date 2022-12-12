@@ -15,7 +15,7 @@ import mysql.connector
 import numpy
 from mysql.connector import errorcode
 import requests
-
+from datetime import datetime
 from kafka import KafkaConsumer, KafkaProducer
 
 global PORT
@@ -45,18 +45,18 @@ QUADRANTS = {}
 CITIES = {}  # diccionario con las ciudades y temperaturas
 PLAYERS = {}
 
-logging.basicConfig(filename="logfileEngine.log",
-                    format='%(asctime)s %(message)s',
-                    filemode='w')
+
+current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S %Z')
+
+logging.basicConfig(
+    filename="Engine.log",
+    format='%(asctime)s : %(message)s',
+    datefmt=current_time,
+    filemode='w',
+    level=logging.DEBUG)
 
 loggerk = logging.getLogger('kafka')
 loggerk.setLevel(logging.WARN)
-
-# Creating an object
-logger = logging.getLogger()
-
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.DEBUG)
 
 
 class KeypressManager(threading.Thread):

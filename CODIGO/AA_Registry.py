@@ -87,7 +87,7 @@ def api_register():
         if res:
             return jsonify({'msg': "REGISTERED SUCCESSFULLY", 'result': True})
         else:
-            return jsonify({'msg': "ERROR REGISTERING", 'result': False})
+            return jsonify({'msg': "ERROR THE PLAYER ALREADY EXISTS", 'result': False})
     else:
         return jsonify({'msg': "Wrong parameters", 'result': False})
 
@@ -139,12 +139,6 @@ def handle_client(connection, address):
 
 
 def socketmanager(server):
-    try:
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.bind((IP, PORT))
-        logging.debug(f'Socket binded to {IP}:{PORT}')
-    except Exception as e:
-        logging.error(f'ERROR BINDING {IP}:{PORT} - {e}')
 
     print("AA_Registry started")
     print(f"LISTENING TO {IP}:{PORT}")
@@ -378,11 +372,11 @@ if __name__ == '__main__':
         'raise_on_warnings': True
     }
 
-    serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    serversocket.bind((IP, PORT))
-    logging.info('Socket binded to ' + IP + ":" + str(PORT))
-
     try:
+        serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        serversocket.bind((IP, PORT))
+        logging.debug('Socket binded to ' + IP + ":" + str(PORT))
+
         # Hilos que ejecuta Registry: hilo para sockets, hilo para api
         socket_thread = threading.Thread(target=socketmanager, args=(serversocket,))
         api_thread = threading.Thread(target=apimanager)

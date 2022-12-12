@@ -1,7 +1,5 @@
 """
     Clara Gonzalez Sanchez
-    Ivan Cano Del Molino
-
 
     Clase que representa un jugador de la partida
 """
@@ -11,12 +9,18 @@ import random
 import threading
 import re
 import time
+from datetime import datetime
 
 from kafka import KafkaConsumer, KafkaProducer
 
-logging.basicConfig(filename="logfileNPC.log",
-                    format='%(asctime)s %(message)s',
-                    filemode='w')
+current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S %Z')
+
+logging.basicConfig(
+    filename="NPC.log",
+    format='%(asctime)s : %(message)s',
+    datefmt=current_time,
+    filemode='w',
+    level=logging.DEBUG)
 
 # String que guarda el alias del jugador
 global ALIAS

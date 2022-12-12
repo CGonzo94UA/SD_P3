@@ -1,10 +1,9 @@
 """
     Clara Gonzalez
-    Ivan Cano
-
 
     Clase que representa un jugador de la partida
 """
+from datetime import datetime
 import json
 import logging
 import ssl
@@ -12,6 +11,7 @@ import threading
 import socket
 import re
 import time
+import requests
 
 from kafka import KafkaConsumer, KafkaProducer
 
@@ -31,9 +31,16 @@ SEPARADOR = '#'
 END = False
 QUEUE = False
 
-logging.basicConfig(filename="logfilePlayer.log",
-                    format='%(asctime)s %(message)s',
-                    filemode='w')
+global config
+
+current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S %Z')
+
+logging.basicConfig(
+    filename="Player.log",
+    format='%(asctime)s : %(message)s',
+    datefmt=current_time,
+    filemode='w',
+    level=logging.INFO)
 
 
 class MapManager(threading.Thread):
@@ -208,7 +215,46 @@ def communication(client: object, message: object) -> str:
     return respuesta.decode()
 
 
-def signinplayer(ip, port):
+def signinplayerapi(register):
+    global ALIAS
+    alias = input("alias: ")
+    ALIAS = alias.upper()
+    passwd = input("password: ")
+    url = register + f"?alias={alias}&pwd={passwd}"
+    logging.info(f"Signin using: {url}")
+    response = requests.post(url)
+    data = json.loads(response.text)
+    msg = data['msg']
+    result = data['result']
+    logging.info(msg)
+    print(msg)
+
+
+def updateplayerapi(login, update):
+    print("Current alias and password:")
+    global ALIAS
+    alias = input("alias: ")
+    ALIAS = alias.upper()
+    passwd = input("passwd: ")
+    url = login + f"?alias={alias}&pwd={passwd}"
+    response = requests.get(url)
+    data = json.loads(response.text)
+    result = data['result']
+    msg = data['msg']
+    if result:
+        print("Enter your new alias and password. Leave blank the data you do not want to modify")
+        n_alias = input("new alias: ")
+        n_passwd = input("new password: ")
+        url = update + f"?alias={alias}&nalias={n_alias}&npwd={n_passwd}"
+        response = requests.post(url)
+        data = json.loads(response.text)
+        result = data['result']
+        msg = data['msg']
+
+    print(msg)
+
+
+def signinplayersocket(ip, port):
     """
         :param port: int
         :param ip: string
@@ -242,7 +288,7 @@ def signinplayer(ip, port):
     logging.info("Close connection in SIGN IN")
 
 
-def updateplayer(ip, port) -> bool:
+def updateplayersocket(ip, port) -> bool:
     print("Current alias and password:")
     global ALIAS
     alias = input("alias: ")
@@ -283,8 +329,10 @@ def updateplayer(ip, port) -> bool:
 
 
 def menu():
-    print("R - Sign in: Create player profile")
-    print("U - Update: Update your profile")
+    print("RS - Sign in: Create player profile using sockets")
+    print("US - Update: Update your profile using sockets")
+    print("RA - Sign in: Create player profile using API")
+    print("UA - Update: Update your profile using API")
     print("L - Login: Join a game")
     print("Q - Quit")
 
@@ -343,16 +391,24 @@ if __name__ == '__main__':
     ip_k = kafkadir[0]
     port_k = int(kafkadir[1])
 
+    registerAPI = parameters["APIRegister"]
+    loginAPI = parameters["APILogin"]
+    updateAPI = parameters["APIUpdate"]
+
     option = ""
     while option.upper() != "Q":
         menu()
         option = input("option> ")
         if option.upper() == 'Q':
             exit()
-        elif option.upper() == 'R':
-            signinplayer(ip_r, port_r)
-        elif option.upper() == 'U':
-            updateplayer(ip_r, port_r)
+        elif option.upper() == 'RS':
+            signinplayersocket(ip_r, port_r)
+        elif option.upper() == 'US':
+            updateplayersocket(ip_r, port_r)
+        elif option.upper() == 'RA':
+            signinplayerapi(registerAPI)
+        elif option.upper() == 'UA':
+            updateplayerapi(loginAPI, updateAPI)
         elif option.upper() == 'L':
             res = login(ip_e, port_e)
             if res == 'ok':
