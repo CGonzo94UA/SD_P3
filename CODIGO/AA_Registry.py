@@ -29,11 +29,10 @@ global config
 
 HEADER = 10
 
-current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S %Z')
 logging.basicConfig(
     filename="Registry.log",
     format='%(asctime)s : %(message)s',
-    datefmt=current_time,
+    datefmt='%Y-%m-%d %H:%M:%S %Z',
     filemode='w',
     level=logging.DEBUG)
 
@@ -45,16 +44,20 @@ app = Flask(__name__)
 def api_login():
     alias = request.args.get('alias')
     pwd = request.args.get('pwd')
+    logging.info(f"{request.remote_addr} - LOGIN - PARAMETERS alias: {alias}, passwd: {pwd}")
 
     # Check if user and passwords are correct
     if check_alias(alias):
         result = login(alias, pwd)
         if result:
             return jsonify({'msg': "LOGIN SUCCESSFULLY", 'result': True})
+            logging.info(f"{request.remote_addr} - LOGIN SUCCESSFULLY")
         else:
             return jsonify({'msg': "ERROR LOGIN", 'result': False})
+            logging.info(f"{request.remote_addr} - ERROR LOGIN IN")
     else:
         return jsonify({'msg': "Wrong parameters", 'result': False})
+        logging.info(f"{request.remote_addr} - ERROR WRONG PARAMETERS")
 
 
 # Update through the API
@@ -63,17 +66,21 @@ def api_update():
     alias = request.args.get('alias')
     n_alias = request.args.get('nalias')
     n_passwd = request.args.get('npwd')
+    logging.info(f"{request.remote_addr} - UPDATE - PARAMETERS alias: {alias}, new alias: {n_alias}, new passwd: {n_passwd}")
 
     if check_alias(alias):
         result = modify(alias, n_alias, n_passwd)
 
         if result:
             return jsonify({'msg': "UPDATED SUCCESSFULLY", 'result': True})
+            logging.info(f"{request.remote_addr} - UPDATED SUCCESSFULLY")
         else:
             return jsonify({'msg': "ERROR UPDATING", 'result': False})
+            logging.info(f"{request.remote_addr} - ERROR UPDATING")
 
     else:
         return jsonify({'msg': "Wrong parameters", 'result': False})
+        logging.info(f"{request.remote_addr} - ERROR WRONG PARAMETERS")
 
 
 # Register through the API
@@ -81,15 +88,19 @@ def api_update():
 def api_register():
     ali = request.args.get('alias')
     pwd = request.args.get('pwd')
+    logging.info(f"{request.remote_addr} - REGISTRY - PARAMETERS alias: {ali} passwd: {pwd}")
     if check_alias(ali):
         res = sign(ali, pwd)
 
         if res:
             return jsonify({'msg': "REGISTERED SUCCESSFULLY", 'result': True})
+            logging.info(f"{request.remote_addr} - REGISTERED SUCCESSFULLY")
         else:
             return jsonify({'msg': "ERROR THE PLAYER ALREADY EXISTS", 'result': False})
+            logging.info(f"{request.remote_addr} - ERROR REGISTERING THE PLAYER ALREADY EXISTS")
     else:
         return jsonify({'msg': "Wrong parameters", 'result': False})
+        logging.info(f"{request.remote_addr} - ERROR WRONG PARAMETERS")
 
 
 def apimanager():
@@ -145,7 +156,7 @@ def socketmanager(server):
     server.listen()
     logging.debug("AA_Registry started")
     logging.debug(f"LISTENING TO {IP}:{PORT}")
-    n_connections = threading.active_count() - 1
+    n_connections = threading.active_count() - 2
     logging.debug(f"CURRENT CONNECTIONS: {n_connections}")
 
     # Wrap the server socket in an SSL context
