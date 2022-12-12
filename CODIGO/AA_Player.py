@@ -237,6 +237,7 @@ def updateplayerapi(login, update):
     ALIAS = alias.upper()
     passwd = input("passwd: ")
     url = login + f"?alias={alias}&pwd={passwd}"
+    logging.info(f"Logining using: {url}")
     response = requests.get(url)
     data = json.loads(response.text)
     result = data['result']
@@ -246,6 +247,7 @@ def updateplayerapi(login, update):
         n_alias = input("new alias: ")
         n_passwd = input("new password: ")
         url = update + f"?alias={alias}&nalias={n_alias}&npwd={n_passwd}"
+        logging.info(f"Updating using: {url}")
         response = requests.post(url)
         data = json.loads(response.text)
         result = data['result']
