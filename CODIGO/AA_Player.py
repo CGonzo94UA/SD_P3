@@ -174,14 +174,16 @@ def login(ip, port) -> bool:
     ret = ""
 
     try:
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
         # context.load_cert_chain(certfile="certRegistry.pem", keyfile="certRegistry.pem")
         # context.load_verify_locations(cafile='server.crt')
-        secure_client_socket = context.wrap_socket(client_socket)
+        # secure_client = context.wrap_socket(client)
 
-        secure_client_socket.connect((ip, port))
-        ret = communication(secure_client_socket, credentials)
+        # secure_client.connect((ip, port))
+        # ret = communication(secure_client_socket, credentials)
+        client.connect((ip, port))
+        ret = communication(client, credentials)
         if ret == 'ok':
             logging.info("SUCCESSFULLY LOGGED IN")
         elif ret == 'no':
