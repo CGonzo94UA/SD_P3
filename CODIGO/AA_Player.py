@@ -176,32 +176,39 @@ def login(ip, port) -> bool:
 
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        # context.load_cert_chain(certfile="certRegistry.pem", keyfile="certRegistry.pem")
-        # context.load_verify_locations(cafile='server.crt')
-        # secure_client = context.wrap_socket(client)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        context.load_verify_locations(cafile='engineCA.pem')
+        secure_client = context.wrap_socket(client)
 
-        # secure_client.connect((ip, port))
-        # ret = communication(secure_client_socket, credentials)
-        client.connect((ip, port))
-        ret = communication(client, credentials)
-        if ret == 'ok':
-            logging.info("SUCCESSFULLY LOGGED IN")
-        elif ret == 'no':
-            logging.info("ALIAS OR PASSWORD WRONG")
-        elif ret == 'in':
-            logging.warning("YOU ARE ALREADY LOG IN")
-        elif ret == 'wait':
-            # En espera para siguiente PARTIDA
-            logging.info("WAITING FOR PLAYERS...")
+        secure_client.connect((ip, port))
+        ret = communication(secure_client, credentials)
+        # Obtain the certificate from the server
+        server_cert = secure_client.getpeercert()
+
+        if not server_cert:
+            logging.error("Unable to retrieve server certificate")
+            print("Unable to retrieve server certificate")
         else:
-            logging.info("Engine has to many connections")
-
+            logging.info("The server has a valid certificate")
+            print("The server has a valid certificate, communicating with it")
+            # client.connect((ip, port))
+            # ret = communication(client, credentials)
+            if ret == 'ok':
+                logging.info("SUCCESSFULLY LOGGED IN")
+            elif ret == 'no':
+                logging.info("ALIAS OR PASSWORD WRONG")
+            elif ret == 'in':
+                logging.warning("YOU ARE ALREADY LOG IN")
+            elif ret == 'wait':
+                # En espera para siguiente PARTIDA
+                logging.info("WAITING FOR PLAYERS...")
+            else:
+                logging.info("Engine has to many connections")
     except Exception as e:
         logging.error(f'ERROR in login: {e}')
     finally:
-        if 'secure_client_socket' in locals():
-            secure_client_socket.close()
+        if 'secure_client' in locals():
+            secure_client.close()
 
     logging.info("Close connection in LOGIN")
     return ret
@@ -271,18 +278,33 @@ def signinplayersocket(ip, port):
     passwd = input("password: ")
     credentials = f"r:{ALIAS}:{passwd}"
     try:
+
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.connect((ip, port))
-        ret = communication(client, credentials)
-        if ret == 'ok':
-            print("REGISTERED SUCCESSFULLY")
-            logging.info("REGISTERED SUCCESSFULLY")
-        elif ret == 'exists':
-            print("ERROR REGISTERING, player already exists")
-            logging.error("ERROR REGISTERING, player already exists")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        context.load_verify_locations(cafile='registryCA.pem')
+        secure_client = context.wrap_socket(client)
+
+        secure_client.connect((ip, port))
+        ret = communication(secure_client, credentials)
+        # Obtain the certificate from the server
+        server_cert = secure_client.getpeercert()
+
+        if not server_cert:
+            logging.error("Unable to retrieve server certificate")
+            print("Unable to retrieve server certificate")
         else:
-            print("ERROR REGISTERING")
-            logging.error("ERROR REGISTERING")
+            logging.info("The server has a valid certificate")
+            print("The server has a valid certificate, communicating with it")
+
+            if ret == 'ok':
+                print("REGISTERED SUCCESSFULLY")
+                logging.info("REGISTERED SUCCESSFULLY")
+            elif ret == 'exists':
+                print("ERROR REGISTERING, player already exists")
+                logging.error("ERROR REGISTERING, player already exists")
+            else:
+                print("ERROR REGISTERING")
+                logging.error("ERROR REGISTERING")
     except Exception as e:
         logging.error(f'ERROR registering: {e}')
         print("It is not possible to sign in. Try again later.")
@@ -303,25 +325,36 @@ def updateplayersocket(ip, port) -> bool:
 
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.connect((ip, port))
-        ret = communication(client, credentials)
-        if ret == 'ok':
-            print("Enter your new alias and password. Leave blank the data you do not want to modify")
-            n_alias = input("new alias: ")
-            n_passwd = input("new password: ")
-            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.connect((ip, port))
-            credentials = f"u:{ALIAS}:{n_alias.upper()}:{n_passwd}"
-            update = communication(client, credentials)
-            if update == 'ok':
-                print("PROFILE UPDATED SUCCESSFULLY")
-                logging.info("PROFILE UPDATED SUCCESSFULLY")
-            elif update == 'no':
-                print("IT IS NOT POSSIBLE TO UPDATE YOUR PROFILE")
-                logging.info("IT IS NOT POSSIBLE TO UPDATE YOUR PROFILE")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        context.load_verify_locations(cafile='registryCert.pem')
+        secure_client = context.wrap_socket(client)
+
+        secure_client.connect((ip, port))
+        ret = communication(secure_client, credentials)
+        # Obtain the certificate from the server
+        server_cert = secure_client.getpeercert()
+
+        if not server_cert:
+            logging.error("Unable to retrieve server certificate")
+            print("Unable to retrieve server certificate")
         else:
-            print('Alias or password wrong')
-            logging.error('Alias or password wrong')
+            if ret == 'ok':
+                print("Enter your new alias and password. Leave blank the data you do not want to modify")
+                n_alias = input("new alias: ")
+                n_passwd = input("new password: ")
+                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client.connect((ip, port))
+                credentials = f"u:{ALIAS}:{n_alias.upper()}:{n_passwd}"
+                update = communication(client, credentials)
+                if update == 'ok':
+                    print("PROFILE UPDATED SUCCESSFULLY")
+                    logging.info("PROFILE UPDATED SUCCESSFULLY")
+                elif update == 'no':
+                    print("IT IS NOT POSSIBLE TO UPDATE YOUR PROFILE")
+                    logging.info("IT IS NOT POSSIBLE TO UPDATE YOUR PROFILE")
+            else:
+                print('Alias or password wrong')
+                logging.error('Alias or password wrong')
     except Exception as e:
         logging.error(f'ERROR updating: {e}')
         print('It is not possible to update your profile now. Try again later.')
