@@ -18,6 +18,8 @@ import requests
 from datetime import datetime
 from kafka import KafkaConsumer, KafkaProducer
 
+global engineId
+global IP
 global PORT
 global MAXPLAYERS
 global PLAYERS
@@ -25,7 +27,8 @@ global CITIES
 global GAME
 global MAPA
 global QUEUEPLAYERS
-
+global EMOJIS
+global CHARACTERS
 global DATABASE
 global USERDB
 global PWDDB
@@ -44,6 +47,9 @@ NPCs = {}
 QUADRANTS = {}
 CITIES = {}  # diccionario con las ciudades y temperaturas
 PLAYERS = {}
+EMOJIS = {}
+CHARACTERS = ["\U0001F435", "\U0001F436", "\U0001F43A", "\U0001F98A", "\U0001F99D", "\U0001F431", "\U0001F981",
+              "\U0001F42F", "\U0001F434", "\U0001F993", "\U0001F42E", "\U0001F428", "\U0001F43C", "\U0001F438", "\U0001F437"]
 
 current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S %Z')
 
@@ -193,17 +199,17 @@ class LoginManager(threading.Thread):
 def updatemap():
     global MAPA
     global FOOD
-    MAPA = [[' ' for _ in range(20)] for _ in range(20)]
+    MAPA = [['·' for _ in range(20)] for _ in range(20)]
     for index in FOOD:
         x = index[0]
         y = index[1]
-        MAPA[x][y] = '\U0001F353'.center(3)
+        MAPA[x][y] = '\U0001F353'.center(2)
 
     global MINES
     for index in MINES:
         x = index[0]
         y = index[1]
-        MAPA[x][y] = '\U0001F4A3'.center(3)
+        MAPA[x][y] = '\U0001F4A3'.center(2)
 
     global NPCs
     for index in NPCs:
@@ -212,7 +218,7 @@ def updatemap():
         y = position[1]
         # Separar alias de NPCs (ej: NPC123456_09)
         level = index.split('_')[1]
-        MAPA[x][y] = str(level).center(3)
+        MAPA[x][y] = str(level).center(2)
 
     global PLAYERS
     for index in PLAYERS:
@@ -220,7 +226,8 @@ def updatemap():
         x = position[0]
         y = position[1]
         # Los jugadores se identifican por los dos primeros caracteres de su alias
-        MAPA[x][y] = index[0:2].center(3)
+        emoji = EMOJIS[index]
+        MAPA[x][y] = emoji.center(2)
 
 
 class ReadMovements(threading.Thread):
@@ -287,8 +294,8 @@ class ReadMovements(threading.Thread):
 
     def battleplayers(self, player1, player2):
         global PLAYERS
-        level1 = calculatetotallevel(player1)
-        level2 = calculatetotallevel(player2)
+        level1 = gettotalevel(player1)
+        level2 = gettotalevel(player2)
 
         # Si son iguales no ocurre nada
         if level1 == level2:
@@ -306,13 +313,12 @@ class ReadMovements(threading.Thread):
         # Resetear a 0 leve, EC, EF del jugador que acaba de morir
         resetplayer(alias)
 
-
     def battlenpcs(self, player, npc):
         global PLAYERS
         try:
             con = mysql.connector.connect(**config)
             cur = con.cursor()
-            sentence = "SELECT nivel, EF, EC FROM player WHERE alias = %s;"
+            sentence = "SELECT nivel, EF, EC FROM Player WHERE alias = %s;"
             args = (player,)
             cur.execute(sentence, args)
             res = cur.fetchone()
@@ -407,7 +413,7 @@ class ReadMovements(threading.Thread):
             # Jugador pisa alimento -> sube de nivel
             FOOD.remove(pos)
             updatelevel(alias, 1)
-            level = calculatetotallevel(alias)
+            level = gettotalevel(alias)
             logging.info(f"Player {alias} has leveled up to level {level}.")
             print(f"Player {alias} has leveled up to level {level}")
 
@@ -457,6 +463,7 @@ class ReadMovements(threading.Thread):
                         PLAYERS[alias] = newposition
 
                         saveposition(alias, newposition)
+                        updatelevel(alias, 0)
                         # Comprueba si hay colisiones con mina, alimento, NPC u otros jugadores
                         self.checkcollisions(alias, newposition)
 
@@ -576,44 +583,6 @@ def checkifnpcinposition(position):
     return False
 
 
-def calculatetotallevel(player):
-    try:
-        con = mysql.connector.connect(**config)
-        cur = con.cursor()
-        sentence = "SELECT nivel, EF, EC FROM Player WHERE alias = %s;"
-        args = (player,)
-        cur.execute(sentence, args)
-        res = cur.fetchone()
-        level = res[0]
-        ef1 = res[1]
-        ec1 = res[2]
-        plus = calculateecoref(PLAYERS[player])
-
-        if plus == 'EF':
-            level += ef1
-        elif plus == 'EC':
-            level += ec1
-
-        if level < 0:
-            level = 0
-
-        print(f'{player} level: ' + str(level))
-        return level
-
-    except mysql.connector.Error as err:
-        level = 0
-        con.close()
-        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-            logging.error("Something is wrong with your user name or password")
-        elif err.errno == errorcode.ER_BAD_DB_ERROR:
-            logging.error("Database does not exist")
-        else:
-            logging.error(f"ERROR IN SELECT: {err}")
-        return level
-    else:
-        con.close()
-
-
 def freeposition(quadrant):
     position = randompositioninquadrant(quadrant)
     while (position in MINES) or (position in FOOD) or checkifplayerinposition(position) or checkifnpcinposition(
@@ -641,8 +610,8 @@ def savemap():
         con = mysql.connector.connect(**config)
         cur = con.cursor()
         maptosave = maptostring()
-        sentence = "INSERT INTO Game (map, stamp, players, npcs, cities, quadrants, mines, food) VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s);"
-        args = (maptosave, str(PLAYERS), str(NPCs), str(CITIES), str(QUADRANTS), str(MINES), str(FOOD))
+        sentence = "UPDATE Game set map = %s, stamp = NOW(), players = %s, npcs = %s, mines = %s, food = %s, characters = %s WHERE id = %s;"
+        args = (maptosave, str(PLAYERS), str(NPCs), str(MINES), str(FOOD), str(EMOJIS), engineId)
         cur.execute(sentence, args)
         con.commit()
         logging.info('SAVE SUCCESSFULLY')
@@ -654,6 +623,28 @@ def savemap():
             logging.error("Database does not exist")
         else:
             logging.error(f"ERROR SAVING MAP: {err}")
+    else:
+        con.close()
+
+
+def initializeGameTable():
+    global MAPA
+    try:
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "INSERT INTO Game (id, stamp, cities, quadrants) VALUES (%s, NOW(), %s, %s);"
+        args = (engineId, str(CITIES), str(QUADRANTS))
+        cur.execute(sentence, args)
+        con.commit()
+        logging.info('SAVE SUCCESSFULLY')
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR INITIALIZING GAME TABLE: {err}")
     else:
         con.close()
 
@@ -686,8 +677,8 @@ def resetplayer(alias):
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        sentence = "UPDATE Player set nivel = ?, EF = ?, EC = ? where alias = ?;"
-        args = (0, 0, 0, alias)
+        sentence = "UPDATE Player set nivel = %s, niveltotal = %s, EF = %s, EC = %s, emoji = %s where alias = %s;"
+        args = (0, 0, 0, 0, "", alias)
         cur.execute(sentence, args)
         con.commit()
         logging.info(f"RESET SUCCESSFULLY")
@@ -698,7 +689,7 @@ def resetplayer(alias):
         elif err.errno == errorcode.ER_BAD_DB_ERROR:
             logging.error("Database does not exist")
         else:
-            logging.error(f"ERROR RESETING EC EF: {err}")
+            logging.error(f"ERROR RESETING Player: {err}")
     else:
         con.close()
 
@@ -741,17 +732,58 @@ def calculatequadrant(position):
     return quadrant
 
 
+def gettotalevel(player):
+    try:
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "SELECT niveltotal FROM Player WHERE alias = %s;"
+        args = (player,)
+        cur.execute(sentence, args)
+        res = cur.fetchone()
+        level = res[0]
+        print(f'{player} level: ' + str(level))
+        return level
+
+    except mysql.connector.Error as err:
+        level = 0
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR IN SELECT: {err}")
+        return level
+    else:
+        con.close()
+
+
 def updatelevel(alias, sum):
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        sentence = "SELECT nivel FROM Player WHERE alias = %s;"
+        sentence = "SELECT nivel, EF, EC FROM Player WHERE alias = %s;"
         args = (alias,)
         cur.execute(sentence, args)
         res = cur.fetchone()
         level = res[0] + sum
-        sentence = "UPDATE Player SET nivel = %s WHERE alias = %s;"
-        args = (level, alias)
+        ef = res[1]
+        ec = res[2]
+        plus = calculateecoref(PLAYERS[alias])
+
+        totallevel = level
+        if plus == 'EF':
+            totallevel += ef
+        elif plus == 'EC':
+            totallevel += ec
+
+        if totallevel < 0:
+            totallevel = 0
+
+        print(f'{alias} level: ' + str(totallevel))
+
+        sentence = "UPDATE Player SET nivel = %s, niveltotal = %s WHERE alias = %s;"
+        args = (level, totallevel, alias)
         cur.execute(sentence, args)
         con.commit()
     except mysql.connector.Error as err:
@@ -816,16 +848,16 @@ def maptosend():
         nextcity = QUADRANTS[index]
         stringcities.append(nextcity + ': ' + str(CITIES[nextcity]) + 'ºC')
 
-    string += '\n' + stringcities[0] + '\t\t\t\t\t\t\t' + stringcities[1] + '\n'
+    string += '\n' + stringcities[0] + '\t\t\t\t' + stringcities[1] + '\n'
     string += maptostring()
-    string += '\n' + stringcities[2] + '\t\t\t\t\t\t\t' + stringcities[3] + '\n'
+    string += '\n' + stringcities[2] + '\t\t\t\t' + stringcities[3] + '\n'
 
     return string
 
 
 def maptostring():
     string = ''
-    string += ('\n'.join([' '.join(['{:3}'.format(item) for item in row])
+    string += ('\n'.join([''.join(['{:2}'.format(item) for item in row])
                           for row in MAPA]))
     return string
 
@@ -866,9 +898,64 @@ def requestcities():
 
     logging.info(CITIES)
 
+"""
+def readCharacters():
+    # leer lista de emojis
+    global CHARACTERS
+    try:
+        with open("Emojis.txt", "r", encoding="UTF-8") as read_file:
+            logging.debug("Converting txt encoded data into Python list")
+            CHARACTERS = numpy.loadtxt(read_file, dtype="str", delimiter="\n")
+            logging.debug(str(CHARACTERS))
+            for index in CHARACTERS:
+                print(index)
+    except Exception as e:
+        logging.error(f'ERROR reading emoji list: {e}')
+        exit()
+"""
+
+
+def checkemoji(emoji):
+    for index in EMOJIS:
+        if EMOJIS[index] == emoji:
+            return True
+    return False
+
+
+def assignemoji(player):
+    global EMOJIS
+    n = random.randint(0, len(CHARACTERS)-1)
+    emoji = CHARACTERS[n]
+
+    while checkemoji(emoji):
+        n = random.randint(0, len(CHARACTERS))
+        emoji = CHARACTERS[n]
+
+    EMOJIS[player] = emoji
+    try:
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "UPDATE Player SET emoji = %s WHERE alias = %s;"
+        args = (emoji, player)
+        cur.execute(sentence, args)
+        con.commit()
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+    else:
+        con.close()
+
+    finally:
+        return emoji
+
 
 def checkpreviousgame():
-    # Hay partida previa si alguno de los niveles no esta a 0 y si hay mapa guardado
+    # Hay partida previa si hay mapa guardado
     res = False
     global PLAYERS
     global NPCs
@@ -876,11 +963,13 @@ def checkpreviousgame():
     global CITIES
     global MINES
     global FOOD
+    global EMOJIS
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        sentence = "SELECT players, npcs, cities, quadrants, mines, food FROM Game WHERE id == (SELECT max(id) FROM game);"
-        cur.execute(sentence)
+        sentence = "SELECT players, npcs, cities, quadrants, mines, food, characters FROM Game WHERE id = %s AND stamp = (SELECT max(stamp) FROM Game);"
+        args = (engineId,)
+        cur.execute(sentence, args)
         query = cur.fetchone()
         # Devuelve tuplas con los datos
         if not query:
@@ -905,6 +994,8 @@ def checkpreviousgame():
                 MINES = eval(mines)
                 food = query[5]
                 FOOD = eval(food)
+                emojis = query[6]
+                EMOJIS = eval(emojis)
 
     except mysql.connector.Error as err:
         res = False
@@ -1031,7 +1122,8 @@ def checkargs(engine, numplayers, mysql, kafka) -> bool:
 
 
 if __name__ == '__main__':
-
+    global engineId
+    global IP
     global PORT
     global MAXPLAYERS
     global DATABASE
@@ -1061,7 +1153,8 @@ if __name__ == '__main__':
         logging.error("ERROR: Wrong args")
         exit()
 
-    address = parameters["ADDRESS"].split(':')
+    engineId = parameters["ADDRESS"]
+    address = engineId.split(':')
     IP = address[0]
     PORT = int(address[1])
 
@@ -1125,11 +1218,15 @@ if __name__ == '__main__':
     while True:
 
         if not previousgame:
-            MAPA = [[' ' for _ in range(20)] for _ in range(20)]
+            MAPA = [['·' for _ in range(20)] for _ in range(20)]
             PLAYERS = {}  # dictionary con los jugadores
             CITIES = {}
             requestcities()
             assigncitytoquadrant()
+            initializeGameTable()
+
+            # Lee los emojis para los players
+            # readCharacters()
 
             # Genera los alimentos y las minas del mapa
             generatefood()
@@ -1156,9 +1253,12 @@ if __name__ == '__main__':
                     alias = QUEUEPLAYERS.pop(0)
                     PLAYERS[alias] = pos
                     saveposition(alias, pos)
+                    updatelevel(alias, 0)
                     sendmessage(producer, alias.upper(), 'JOIN')
                     sendmessage(producer, alias.upper(), 'You have joined the game. Waiting for players...')
-                    # sendmessage(producer, alias.upper(), 'Your player will be UNICODE CHARACTER...')
+                    emoji = assignemoji(alias)
+                    msg = "Your player will be: " + emoji
+                    sendmessage(producer, alias.upper(), msg)
 
             GAME = True
             # Si llega aqui parar el timer y el keypress

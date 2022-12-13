@@ -160,7 +160,8 @@ class MovementManager(threading.Thread):
 
 def updatemap(newmap):
     print(newmap)
-    if newmap != 'You have joined the game. Waiting for players...' and newmap != 'JOIN':
+    #if newmap != 'You have joined the game. Waiting for players...' and newmap != 'JOIN':
+    if '\n' in newmap:
         print("Choose your next move: N,S,W,E,NW,NE,SW,SE")
 
 
