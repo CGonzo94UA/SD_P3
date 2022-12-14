@@ -161,20 +161,19 @@ def socketmanager(server):
 
     # Wrap the server socket in an SSL context
     context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-    context.load_cert_chain(certfile="./registryCert.pem", keyfile="./registryKey.pem")
+    context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
     secure_server_socket = context.wrap_socket(server, server_side=True)
 
     while True:
         try:
             conn, addr = secure_server_socket.accept()
             # conn, addr = server.accept()
-            n_connections = threading.active_count()
+            n_connections = threading.active_count() - 2
             if n_connections >= MAXCONNECTIONS:
                 logging.error(f"{addr} - CONNECTION - ERROR: MAX CONNECTIONS REACHED")
                 print("MAX CONNECTIONS REACHED")
                 conn.send(b"THE SERVER HAS EXCEEDED THE LIMIT OF CONNECTIONS")
                 conn.close()
-                n_connections = threading.active_count() - 1
             else:
                 thread = threading.Thread(target=handle_client, args=(conn, addr))
                 thread.start()

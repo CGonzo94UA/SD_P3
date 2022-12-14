@@ -177,11 +177,14 @@ def login(ip, port) -> bool:
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        context.load_verify_locations(cafile='engineCA.pem')
+        context.load_verify_locations(cafile='cert.pem')
         secure_client = context.wrap_socket(client)
 
         secure_client.connect((ip, port))
         ret = communication(secure_client, credentials)
+        # client.connect((ip, port))
+        # ret = communication(client, credentials)
+
         # Obtain the certificate from the server
         server_cert = secure_client.getpeercert()
 
@@ -191,8 +194,7 @@ def login(ip, port) -> bool:
         else:
             logging.info("The server has a valid certificate")
             print("The server has a valid certificate, communicating with it")
-            # client.connect((ip, port))
-            # ret = communication(client, credentials)
+
             if ret == 'ok':
                 logging.info("SUCCESSFULLY LOGGED IN")
             elif ret == 'no':
@@ -204,6 +206,7 @@ def login(ip, port) -> bool:
                 logging.info("WAITING FOR PLAYERS...")
             else:
                 logging.info("Engine has to many connections")
+
     except Exception as e:
         logging.error(f'ERROR in login: {e}')
     finally:
@@ -278,14 +281,16 @@ def signinplayersocket(ip, port):
     passwd = input("password: ")
     credentials = f"r:{ALIAS}:{passwd}"
     try:
-
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        context.load_verify_locations(cafile='registryCA.pem')
+        context.load_verify_locations(cafile='cert.pem')
         secure_client = context.wrap_socket(client)
 
         secure_client.connect((ip, port))
         ret = communication(secure_client, credentials)
+        # client.connect((ip, port))
+        # ret = communication(client, credentials)
+
         # Obtain the certificate from the server
         server_cert = secure_client.getpeercert()
 
@@ -295,7 +300,6 @@ def signinplayersocket(ip, port):
         else:
             logging.info("The server has a valid certificate")
             print("The server has a valid certificate, communicating with it")
-
             if ret == 'ok':
                 print("REGISTERED SUCCESSFULLY")
                 logging.info("REGISTERED SUCCESSFULLY")
@@ -309,8 +313,8 @@ def signinplayersocket(ip, port):
         logging.error(f'ERROR registering: {e}')
         print("It is not possible to sign in. Try again later.")
     finally:
-        if 'client' in locals():
-            client.close()
+        if 'secure_client' in locals():
+            secure_client.close()
 
     logging.info("Close connection in SIGN IN")
 
@@ -326,11 +330,14 @@ def updateplayersocket(ip, port) -> bool:
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        context.load_verify_locations(cafile='registryCert.pem')
+        context.load_verify_locations(cafile='cert.pem')
         secure_client = context.wrap_socket(client)
 
         secure_client.connect((ip, port))
         ret = communication(secure_client, credentials)
+        # client.connect((ip, port))
+        # ret = communication(client, credentials)
+
         # Obtain the certificate from the server
         server_cert = secure_client.getpeercert()
 
@@ -338,6 +345,8 @@ def updateplayersocket(ip, port) -> bool:
             logging.error("Unable to retrieve server certificate")
             print("Unable to retrieve server certificate")
         else:
+            logging.info("The server has a valid certificate")
+            print("The server has a valid certificate, communicating with it")
             if ret == 'ok':
                 print("Enter your new alias and password. Leave blank the data you do not want to modify")
                 n_alias = input("new alias: ")
@@ -360,8 +369,8 @@ def updateplayersocket(ip, port) -> bool:
         print('It is not possible to update your profile now. Try again later.')
 
     finally:
-        if 'client' in locals():
-            client.close()
+        if 'secure_client' in locals():
+            secure_client.close()
 
     logging.info("Close connection in UPDATE PLAYER")
 

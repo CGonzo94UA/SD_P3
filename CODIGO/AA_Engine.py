@@ -8,6 +8,7 @@ import json
 import logging
 import random
 import re
+import ssl
 import time
 import threading
 import socket
@@ -175,16 +176,23 @@ class LoginManager(threading.Thread):
         logging.info(f"LISTENING TO {IP}:{PORT}")
         n_connections = threading.active_count() - 1
         logging.info(f"CURRENT CONNECTIONS: {n_connections}")
+
+        # Wrap the server socket in an SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
+        secure_server_socket = context.wrap_socket(self.server, server_side=True)
+
         while True:
             try:
-                conn, addr = self.server.accept()
-                n_connections = threading.active_count()
+                conn, addr = secure_server_socket.accept()
+                # conn, addr = self.server.accept()
+                n_connections = threading.active_count() - 2
+
                 if n_connections >= MAX_CONNECTIONS:
                     logging.warning("MAX CONNECTIONS REACHED")
                     print("MAX CONNECTIONS REACHED")
                     conn.send(b'THE SERVER HAS EXCEEDED THE LIMIT OF CONNECTIONS')
                     conn.close()
-                    n_connections = threading.active_count() - 1
                 else:
                     thread = threading.Thread(target=self.handle_client, args=(conn, addr))
                     thread.start()
@@ -203,13 +211,13 @@ def updatemap():
     for index in FOOD:
         x = index[0]
         y = index[1]
-        MAPA[x][y] = '\U0001F353'.center(2)
+        MAPA[x][y] = '\U0001F353'.center(1)
 
     global MINES
     for index in MINES:
         x = index[0]
         y = index[1]
-        MAPA[x][y] = '\U0001F4A3'.center(2)
+        MAPA[x][y] = '\U0001F4A3'.center(1)
 
     global NPCs
     for index in NPCs:
@@ -218,7 +226,7 @@ def updatemap():
         y = position[1]
         # Separar alias de NPCs (ej: NPC123456_09)
         level = index.split('_')[1]
-        MAPA[x][y] = str(level).center(2)
+        MAPA[x][y] = str(level).center(1)
 
     global PLAYERS
     for index in PLAYERS:
@@ -227,7 +235,7 @@ def updatemap():
         y = position[1]
         # Los jugadores se identifican por los dos primeros caracteres de su alias
         emoji = EMOJIS[index]
-        MAPA[x][y] = emoji.center(2)
+        MAPA[x][y] = emoji.center(1)
 
 
 class ReadMovements(threading.Thread):
@@ -413,9 +421,6 @@ class ReadMovements(threading.Thread):
             # Jugador pisa alimento -> sube de nivel
             FOOD.remove(pos)
             updatelevel(alias, 1)
-            level = gettotalevel(alias)
-            logging.info(f"Player {alias} has leveled up to level {level}.")
-            print(f"Player {alias} has leveled up to level {level}")
 
     def checkNPCjoin(self, alias, msg):
         regex = 'NPC[0-9]{6}_[0-9]'
@@ -741,7 +746,7 @@ def gettotalevel(player):
         cur.execute(sentence, args)
         res = cur.fetchone()
         level = res[0]
-        print(f'{player} level: ' + str(level))
+        logging.debug(f'{player} level: ' + str(level))
         return level
 
     except mysql.connector.Error as err:
@@ -780,7 +785,8 @@ def updatelevel(alias, sum):
         if totallevel < 0:
             totallevel = 0
 
-        print(f'{alias} level: ' + str(totallevel))
+        logging.info(f"Player {alias} has leveled up to level {level}.")
+        print(f"Player {alias} has leveled up to level {level}")
 
         sentence = "UPDATE Player SET nivel = %s, niveltotal = %s WHERE alias = %s;"
         args = (level, totallevel, alias)
