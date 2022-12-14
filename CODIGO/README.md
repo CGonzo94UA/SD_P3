@@ -32,8 +32,8 @@ docker-compose rm -svf
 
 Para crear CERTIFICADOS autofirmados:
 
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certRegistry.pem -out certRegistry.pem
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout key.pem -out cert.pem
 
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certEngine.pem -out certEngine.pem
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout keyEngine.pem -out certEngine.pem
 
 
