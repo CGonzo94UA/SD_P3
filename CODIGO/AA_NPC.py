@@ -9,16 +9,12 @@ import random
 import threading
 import re
 import time
-from datetime import datetime
 
 from kafka import KafkaConsumer, KafkaProducer
-
-current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S %Z')
 
 logging.basicConfig(
     filename="NPC.log",
     format='%(asctime)s : %(message)s',
-    datefmt=current_time,
     filemode='w',
     level=logging.DEBUG)
 

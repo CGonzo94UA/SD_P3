@@ -11,7 +11,6 @@ import mysql.connector
 from mysql.connector import errorcode
 import threading
 import re
-from datetime import datetime
 import hashlib
 import os
 import ssl
@@ -32,7 +31,6 @@ HEADER = 10
 logging.basicConfig(
     filename="Registry.log",
     format='%(asctime)s : %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S %Z',
     filemode='w',
     level=logging.DEBUG)
 
@@ -106,7 +104,7 @@ def api_register():
 def apimanager():
     try:
         logging.info("Starting the API...")
-        app.run(debug=False, port=5000)
+        app.run(debug=False, port=5000, ssl_context=('cert.pem', 'key.pem'))
         logging.info("The API has started.")
     except Exception as error:
         logging.error(f"Error running the API: {error}")

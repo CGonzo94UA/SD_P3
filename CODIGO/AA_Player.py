@@ -3,7 +3,6 @@
 
     Clase que representa un jugador de la partida
 """
-from datetime import datetime
 import json
 import logging
 import ssl
@@ -12,6 +11,7 @@ import socket
 import re
 import time
 import requests
+import warnings
 
 from kafka import KafkaConsumer, KafkaProducer
 
@@ -33,14 +33,14 @@ QUEUE = False
 
 global config
 
-current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S %Z')
-
 logging.basicConfig(
     filename="Player.log",
     format='%(asctime)s : %(message)s',
-    datefmt=current_time,
     filemode='w',
     level=logging.INFO)
+
+# suppress warning messages
+warnings.filterwarnings("ignore")
 
 
 class MapManager(threading.Thread):
@@ -186,7 +186,7 @@ def login(ip, port) -> bool:
         # ret = communication(client, credentials)
 
         # Obtain the certificate from the server
-        server_cert = secure_client.getpeercert()
+        server_cert = secure_client.getpeercert(True)
 
         if not server_cert:
             logging.error("Unable to retrieve server certificate")
@@ -235,7 +235,7 @@ def signinplayerapi(register):
     passwd = input("password: ")
     url = register + f"?alias={alias}&pwd={passwd}"
     logging.info(f"Signin using: {url}")
-    response = requests.post(url)
+    response = requests.post(url, verify=False)
     data = json.loads(response.text)
     msg = data['msg']
     result = data['result']
@@ -251,7 +251,7 @@ def updateplayerapi(login, update):
     passwd = input("passwd: ")
     url = login + f"?alias={alias}&pwd={passwd}"
     logging.info(f"Logining using: {url}")
-    response = requests.get(url)
+    response = requests.get(url, verify=False)
     data = json.loads(response.text)
     result = data['result']
     msg = data['msg']
@@ -261,7 +261,7 @@ def updateplayerapi(login, update):
         n_passwd = input("new password: ")
         url = update + f"?alias={alias}&nalias={n_alias}&npwd={n_passwd}"
         logging.info(f"Updating using: {url}")
-        response = requests.post(url)
+        response = requests.post(url, verify=False)
         data = json.loads(response.text)
         result = data['result']
         msg = data['msg']
@@ -287,17 +287,17 @@ def signinplayersocket(ip, port):
         secure_client = context.wrap_socket(client)
 
         secure_client.connect((ip, port))
-        ret = communication(secure_client, credentials)
-        # client.connect((ip, port))
-        # ret = communication(client, credentials)
-
         # Obtain the certificate from the server
-        server_cert = secure_client.getpeercert()
+        server_cert = secure_client.getpeercert(True)
+
+        #client.connect((ip, port))
+        #ret = communication(client, credentials)
 
         if not server_cert:
             logging.error("Unable to retrieve server certificate")
             print("Unable to retrieve server certificate")
         else:
+            ret = communication(secure_client, credentials)
             logging.info("The server has a valid certificate")
             print("The server has a valid certificate, communicating with it")
             if ret == 'ok':
@@ -309,6 +309,7 @@ def signinplayersocket(ip, port):
             else:
                 print("ERROR REGISTERING")
                 logging.error("ERROR REGISTERING")
+
     except Exception as e:
         logging.error(f'ERROR registering: {e}')
         print("It is not possible to sign in. Try again later.")
@@ -334,12 +335,12 @@ def updateplayersocket(ip, port) -> bool:
         secure_client = context.wrap_socket(client)
 
         secure_client.connect((ip, port))
-        ret = communication(secure_client, credentials)
+
         # client.connect((ip, port))
         # ret = communication(client, credentials)
 
         # Obtain the certificate from the server
-        server_cert = secure_client.getpeercert()
+        server_cert = secure_client.getpeercert(True)
 
         if not server_cert:
             logging.error("Unable to retrieve server certificate")
@@ -347,14 +348,17 @@ def updateplayersocket(ip, port) -> bool:
         else:
             logging.info("The server has a valid certificate")
             print("The server has a valid certificate, communicating with it")
+            ret = communication(secure_client, credentials)
             if ret == 'ok':
                 print("Enter your new alias and password. Leave blank the data you do not want to modify")
                 n_alias = input("new alias: ")
                 n_passwd = input("new password: ")
                 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.connect((ip, port))
+                secure_client = context.wrap_socket(client)
+                secure_client.connect((ip, port))
+
                 credentials = f"u:{ALIAS}:{n_alias.upper()}:{n_passwd}"
-                update = communication(client, credentials)
+                update = communication(secure_client, credentials)
                 if update == 'ok':
                     print("PROFILE UPDATED SUCCESSFULLY")
                     logging.info("PROFILE UPDATED SUCCESSFULLY")

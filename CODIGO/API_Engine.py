@@ -21,7 +21,6 @@ global config
 logging.basicConfig(
     filename="Registry.log",
     format='%(asctime)s : %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S %Z',
     filemode='w',
     level=logging.DEBUG)
 

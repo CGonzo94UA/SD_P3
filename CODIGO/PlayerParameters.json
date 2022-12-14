@@ -2,7 +2,7 @@
 	"ENGINE": "127.0.0.1:5054",
 	"REGISTRY": "127.0.0.1:4048",
 	"KAFKA": "172.50.0.11:29092",
-	"APIRegister": "http://127.0.0.1:5000/register",
-	"APILogin": "http://127.0.0.1:5000/login",
-	"APIUpdate": "http://127.0.0.1:5000/update"
+	"APIRegister": "https://127.0.0.1:5000/register",
+	"APILogin": "https://127.0.0.1:5000/login",
+	"APIUpdate": "https://127.0.0.1:5000/update"
  }

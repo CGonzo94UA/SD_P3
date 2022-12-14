@@ -16,7 +16,6 @@ import mysql.connector
 import numpy
 from mysql.connector import errorcode
 import requests
-from datetime import datetime
 from kafka import KafkaConsumer, KafkaProducer
 
 global engineId
@@ -52,12 +51,9 @@ EMOJIS = {}
 CHARACTERS = ["\U0001F435", "\U0001F436", "\U0001F43A", "\U0001F98A", "\U0001F99D", "\U0001F431", "\U0001F981",
               "\U0001F42F", "\U0001F434", "\U0001F993", "\U0001F42E", "\U0001F428", "\U0001F43C", "\U0001F438", "\U0001F437"]
 
-current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S %Z')
-
 logging.basicConfig(
     filename="Engine.log",
     format='%(asctime)s : %(message)s',
-    datefmt=current_time,
     filemode='w',
     level=logging.DEBUG)
 
@@ -862,8 +858,9 @@ def maptosend():
 
 
 def maptostring():
+
     string = ''
-    string += ('\n'.join([''.join(['{:2}'.format(item) for item in row])
+    string += ('\n'.join([' '.join(['{:1}'.format(item) for item in row])
                           for row in MAPA]))
     return string
 
