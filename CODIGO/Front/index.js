@@ -26,7 +26,28 @@ function getMap() {
                 console.log(cities);
                 console.log(quadrants);
                 console.log(map);
-                //document.getElementById('map').innerHTML = map;
+                
+                var city1 = document.getElementById("city1");
+                var city2 = document.getElementById("city2");
+                var city3 = document.getElementById("city3");
+                var city4 = document.getElementById("city4");
+
+                let i = 1;
+                for (const key in cities) {
+                  if (i === 1) {
+                    city1.innerHTML = `${key}: ${cities[key]} ºC`;
+                  } else if (i === 2) {
+                    city2.innerHTML = `${key}: ${cities[key]} ºC`;
+                  } else if (i === 3) {
+                    city3.innerHTML = `${key}: ${cities[key]} ºC`;
+                  } else if (i === 4) {
+                    city4.innerHTML = `${key}: ${cities[key]} ºC`;
+                  }
+                  i++;
+
+                }
+
+                
                 var displayMap = document.getElementById("map");
                 displayMap.innerHTML = '';
                 var mapElementTemplate = document.getElementById("map-element-template");
@@ -55,7 +76,7 @@ function getMap() {
         document.getElementById('error-message').innerHTML = error.message;
       }
       
-    }, 10000);
+    }, 1000);
   }
 
 

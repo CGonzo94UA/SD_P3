@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>SISTEMAS DISTRIBUIDOS</title>
     <link rel="stylesheet" href="estilos.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Carter+One">
@@ -30,19 +31,24 @@
 
   <h1 class="titulo"> AGAINST ALL </h1>
 
-  <div class="cities">
-    <div id="city1"></div>
-    <div id="city2"></div>
 
-
-    <div id="city3"></div>
-    <div id="city4"></div>
-  </div>
-
-
-  <div class="tablero"> 
+  <div class="tablero">
+    <div class="city-top-left">
+      <div id="city1"></div>
+    </div>
+    <div class="city-top-right">
+      <div id="city2"></div>
+    </div>
+    <div class="city-bottom-left">
+      <div id="city3"></div>
+    </div>
+    <div class="city-bottom-right">
+      <div id="city4"></div>
+    </div>
     <div id="map"></div>
     <div id="error-message"></div>
+
+
     <script src="index.js"></script>
     <script>
       // Call the function that makes the API request
@@ -51,6 +57,7 @@
 
   <template id="map-element-template"></template>
   </div> 
+
 
   <div class="nieve"></div>
   <div class="nieve"></div>

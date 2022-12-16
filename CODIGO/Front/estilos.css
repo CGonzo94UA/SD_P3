@@ -4,8 +4,6 @@ body {
   overflow: hidden;
 }
 
-
-
 .titulo{
   text-align:center;
   color: white;
@@ -29,6 +27,84 @@ body {
   text-align: center;
 }
 
+.map-element {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  text-align: center;
+}
+
+.city-top-left{
+  width: auto; 
+  height: auto;
+  border: 2px solid white;
+  background-color: white;
+  margin: auto;
+  position: absolute;
+  top: -40px;
+  left: 0px;
+  opacity: 1;
+  border-radius: 10px;
+  text-align: center;
+  font-family: "Carter One", sans-serif;
+  font-size: 18px;
+  font-style: normal; 
+  font-variant: small-caps;
+}
+
+
+.city-top-right{
+  width: auto; 
+  height: auto;
+  border: 2px solid white;
+  background-color: white;
+  margin: auto;
+  position: absolute;
+  top: -40px;
+  right: 0px;
+  opacity: 1;
+  border-radius: 10px;
+  text-align: center;
+  font-family: "Carter One", sans-serif;
+  font-size: 18px;
+  font-style: normal; 
+  font-variant: small-caps;
+}
+
+.city-bottom-left{
+  width: auto; 
+  height: auto;
+  border: 2px solid white;
+  background-color: white;
+  margin: auto;
+  position: absolute;
+  bottom: -40px;
+  left: 0px;
+  border-radius: 10px;
+  text-align: center;
+  font-family: "Carter One", sans-serif;
+  font-size: 18px;
+  font-style: normal; 
+  font-variant: small-caps;
+}
+
+.city-bottom-right{
+  width: auto; 
+  height: auto;
+  border: 2px solid white;
+  background-color: white;
+  margin: auto;
+  position: absolute;
+  bottom: -40px;
+  right: 0px;
+  border-radius: 10px;
+  text-align: center;
+  font-family: "Carter One", sans-serif;
+  font-size: 18px;
+  font-style: normal; 
+  font-variant: small-caps;
+}
+
 #error-message {
   width: 100px;
   height: 100px;
@@ -38,12 +114,7 @@ body {
   text-align: center;
 }
 
-.map-element {
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  text-align: center;
-}
+
 
 .nieve {
   position: absolute;
