@@ -30,21 +30,28 @@
 
   <h1 class="titulo"> AGAINST ALL </h1>
 
-  <div class="tablero"> 
+  <div class="cities">
+    <div id="city1"></div>
+    <div id="city2"></div>
 
-  <div id="result"></div>
-  <div id="map"></div>
-  <script src="index.js"></script>
-  <script>
-    // Call the function that makes the API request
-    getMap();
-  </script>
 
+    <div id="city3"></div>
+    <div id="city4"></div>
   </div>
 
 
-  <div class="nieve"></div>
-  <div class="nieve"></div>
+  <div class="tablero"> 
+    <div id="map"></div>
+    <div id="error-message"></div>
+    <script src="index.js"></script>
+    <script>
+      // Call the function that makes the API request
+      getMap();
+    </script>
+
+  <template id="map-element-template"></template>
+  </div> 
+
   <div class="nieve"></div>
   <div class="nieve"></div>
   <div class="nieve"></div>

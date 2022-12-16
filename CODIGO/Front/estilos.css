@@ -17,15 +17,32 @@ body {
 }
 
 .tablero{
-  width: 800px;
-  height: 650px;
+  width: 400px; 
+  height: 380px; /* Set the height to the height of the content, within the specified limits */
   border: 2px solid white;
   background-color: white;
   margin: auto;
   position: relative;
-  top: 1%;
+  top: 3%;
   opacity: 1;
-  border-radius: 20px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+#error-message {
+  width: 100px;
+  height: 100px;
+  color: #093d6e;
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.map-element {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  text-align: center;
 }
 
 .nieve {

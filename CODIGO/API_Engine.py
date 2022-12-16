@@ -8,7 +8,7 @@ from flask import Flask, jsonify, request
 import logging
 import mysql.connector
 from mysql.connector import errorcode
-from prettytable import from_db_cursor, PrettyTable
+from flask_cors import CORS, cross_origin
 
 global DATABASE
 global USERDB
@@ -24,7 +24,7 @@ logging.basicConfig(
     level=logging.DEBUG)
 
 app = Flask(__name__)
-
+CORS(app)
 
 # Get the Players of the game
 @app.route('/players', methods=['GET'])
