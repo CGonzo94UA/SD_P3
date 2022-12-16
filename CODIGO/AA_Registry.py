@@ -31,6 +31,7 @@ HEADER = 10
 logging.basicConfig(
     filename="Registry.log",
     format='%(asctime)s : %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S %Z',
     filemode='w',
     level=logging.DEBUG)
 
@@ -48,14 +49,14 @@ def api_login():
     if check_alias(alias):
         result = login(alias, pwd)
         if result:
-            return jsonify({'msg': "LOGIN SUCCESSFULLY", 'result': True})
             logging.info(f"{request.remote_addr} - LOGIN SUCCESSFULLY")
+            return jsonify({'msg': "LOGIN SUCCESSFULLY", 'result': True})
         else:
-            return jsonify({'msg': "ERROR LOGIN", 'result': False})
             logging.info(f"{request.remote_addr} - ERROR LOGIN IN")
+            return jsonify({'msg': "ERROR LOGIN", 'result': False})
     else:
-        return jsonify({'msg': "Wrong parameters", 'result': False})
         logging.info(f"{request.remote_addr} - ERROR WRONG PARAMETERS")
+        return jsonify({'msg': "Wrong parameters", 'result': False})
 
 
 # Update through the API
@@ -64,21 +65,22 @@ def api_update():
     alias = request.args.get('alias')
     n_alias = request.args.get('nalias')
     n_passwd = request.args.get('npwd')
-    logging.info(f"{request.remote_addr} - UPDATE - PARAMETERS alias: {alias}, new alias: {n_alias}, new passwd: {n_passwd}")
+    logging.info(
+        f"{request.remote_addr} - UPDATE - PARAMETERS alias: {alias}, new alias: {n_alias}, new passwd: {n_passwd}")
 
     if check_alias(alias):
         result = modify(alias, n_alias, n_passwd)
 
         if result:
-            return jsonify({'msg': "UPDATED SUCCESSFULLY", 'result': True})
             logging.info(f"{request.remote_addr} - UPDATED SUCCESSFULLY")
+            return jsonify({'msg': "UPDATED SUCCESSFULLY", 'result': True})
         else:
-            return jsonify({'msg': "ERROR UPDATING", 'result': False})
             logging.info(f"{request.remote_addr} - ERROR UPDATING")
+            return jsonify({'msg': "ERROR UPDATING", 'result': False})
 
     else:
-        return jsonify({'msg': "Wrong parameters", 'result': False})
         logging.info(f"{request.remote_addr} - ERROR WRONG PARAMETERS")
+        return jsonify({'msg': "Wrong parameters", 'result': False})
 
 
 # Register through the API
@@ -91,20 +93,20 @@ def api_register():
         res = sign(ali, pwd)
 
         if res:
-            return jsonify({'msg': "REGISTERED SUCCESSFULLY", 'result': True})
             logging.info(f"{request.remote_addr} - REGISTERED SUCCESSFULLY")
+            return jsonify({'msg': "REGISTERED SUCCESSFULLY", 'result': True})
         else:
-            return jsonify({'msg': "ERROR THE PLAYER ALREADY EXISTS", 'result': False})
             logging.info(f"{request.remote_addr} - ERROR REGISTERING THE PLAYER ALREADY EXISTS")
+            return jsonify({'msg': "ERROR THE PLAYER ALREADY EXISTS", 'result': False})
     else:
-        return jsonify({'msg': "Wrong parameters", 'result': False})
         logging.info(f"{request.remote_addr} - ERROR WRONG PARAMETERS")
+        return jsonify({'msg': "Wrong parameters", 'result': False})
 
 
 def apimanager():
     try:
         logging.info("Starting the API...")
-        app.run(debug=False, port=5000, ssl_context=('cert.pem', 'key.pem'))
+        app.run(debug=False, port=5000, ssl_context=('./ssl/cert.pem', './ssl/key.pem'))
         logging.info("The API has started.")
     except Exception as error:
         logging.error(f"Error running the API: {error}")
@@ -148,7 +150,6 @@ def handle_client(connection, address):
 
 
 def socketmanager(server):
-
     print("AA_Registry started")
     print(f"LISTENING TO {IP}:{PORT}")
     server.listen()
@@ -159,7 +160,7 @@ def socketmanager(server):
 
     # Wrap the server socket in an SSL context
     context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-    context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
+    context.load_cert_chain(certfile="./ssl/cert.pem", keyfile="./ssl/key.pem")
     secure_server_socket = context.wrap_socket(server, server_side=True)
 
     while True:

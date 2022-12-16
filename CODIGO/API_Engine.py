@@ -17,7 +17,6 @@ global DBIP
 global DBPORT
 global config
 
-
 logging.basicConfig(
     filename="Registry.log",
     format='%(asctime)s : %(message)s',
@@ -35,24 +34,23 @@ def get_players():
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        sentence = "SELECT players FROM Game WHERE stamp = (SELECT max(stamp) FROM Game);"
+        sentence = "SELECT players, characters FROM Game WHERE stamp = (SELECT max(stamp) FROM Game);"
         cur.execute(sentence)
         query = cur.fetchone()
         # Devuelve tuplas con los datos
         if not query:
-            return jsonify({'msg': "There is no game in play at this time", 'result': False})
             logging.info(f"{request.remote_addr} - NO GAME IN PLAY AT THIS TIME")
+            return jsonify({'msg': "There is no game in play at this time", 'result': False})
         else:
-            players = query[0]
-            PLAYERS = eval(players)
-            answer = PrettyTable()
-            answer.field_names = ["Alias", "Level", "EC", "EF", "Total level", "Position"]
+            players = eval(query[0])
+            characters = eval(query[1])
+            data = {}
 
-            if not PLAYERS:
-                return jsonify({'msg': "There are no players at this time", 'result': False})
+            if not players:
                 logging.info(f"{request.remote_addr} - NO PLAYERS AT THIS TIME")
+                return jsonify({'msg': "There are no players at this time", 'result': False})
             else:
-                for player in PLAYERS:
+                for player in players:
                     sentence = "SELECT nivel, niveltotal, EC, EF, posicion FROM Player WHERE alias = %s;"
                     args = (player,)
                     cur.execute(sentence, args)
@@ -63,7 +61,6 @@ def get_players():
                         EC = query[2]
                         EF = query[3]
                         pos = query[4]
-                        answer.add_row(player, level, EC, EF, total, pos)
 
     except mysql.connector.Error as err:
         con.close()
@@ -95,34 +92,85 @@ def get_npcs():
 @app.route('/map', methods=['GET'])
 def get_map():
     logging.info(f"{request.remote_addr} - GET MAP")
-    res = False
+    try:
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "SELECT map, cities, quadrants FROM Game WHERE stamp = (SELECT max(stamp) FROM Game);"
+        cur.execute(sentence)
+        query = cur.fetchone()
+        # Devuelve tuplas con los datos
+        if not query:
+            logging.info("There is no game at the moment")
+            return jsonify({'msg': "There is no game at the moment", 'result': False})
+        else:
+            map = eval(query[0])
+            cities = eval(query[1])
+            quadrants = eval(query[2])
+            data = {"result": True,
+                    "map": map,
+                    "cities": cities,
+                    "quadrants": quadrants
+                    }
+            logging.info(f"{request.remote_addr} - GOT MAP SUCCESSFULLY")
+            return json.dumps(data)
 
-    if res:
-        return jsonify({'msg': "REGISTERED SUCCESSFULLY", 'result': True})
-        logging.info(f"{request.remote_addr} - REGISTERED SUCCESSFULLY")
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+            # ToDo enviar numero error
+        logging.info("There is no game at the moment")
+        return jsonify({'msg': "There is no game at the moment", 'result': False})
     else:
-        return jsonify({'msg': "ERROR THE PLAYER ALREADY EXISTS", 'result': False})
-        logging.info(f"{request.remote_addr} - ERROR REGISTERING THE PLAYER ALREADY EXISTS")
+        con.close()
 
 
-# Get the NPCs of the game
+# Get the cities of the game
 @app.route('/cities', methods=['GET'])
 def get_cities():
-    logging.info(f"{request.remote_addr} - GET NPCs")
-    res = False
+    logging.info(f"{request.remote_addr} - GET CITIES")
+    try:
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "SELECT cities, quadrants FROM Game WHERE stamp = (SELECT max(stamp) FROM Game);"
+        cur.execute(sentence)
+        query = cur.fetchone()
+        # Devuelve tuplas con los datos
+        if not query:
+            logging.info("There is no game at the moment")
+            return jsonify({'msg': "There is no game at the moment", 'result': False})
+        else:
+            cities = eval(query[0])
+            quadrants = eval(query[1])
+            data = {"result": True,
+                    "cities": cities,
+                    "quadrants": quadrants
+                    }
+            logging.info(f"{request.remote_addr} - GOT CITIES SUCCESSFULLY")
+            return json.dumps(data)
 
-    if res:
-        return jsonify({'msg': "REGISTERED SUCCESSFULLY", 'result': True})
-        logging.info(f"{request.remote_addr} - REGISTERED SUCCESSFULLY")
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+        logging.info("There is no game at the moment")
+        return jsonify({'msg': "There is no game at the moment", 'result': False})
     else:
-        return jsonify({'msg': "ERROR THE PLAYER ALREADY EXISTS", 'result': False})
-        logging.info(f"{request.remote_addr} - ERROR REGISTERING THE PLAYER ALREADY EXISTS")
+        con.close()
 
 
 if __name__ == '__main__':
 
     try:
-        with open("RegistryParameters.json", "r") as read_file:
+        with open("APIEngineParameters.json", "r") as read_file:
             logging.debug("Converting JSON encoded data into Python dictionary")
             parameters = json.load(read_file)
             logging.debug(str(parameters))

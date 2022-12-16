@@ -42,6 +42,11 @@ logging.basicConfig(
 # suppress warning messages
 warnings.filterwarnings("ignore")
 
+ssl_config = {
+    'ssl.key.location': './ssl/key.pem',
+    'ssl.certificate.location': './ssl/cert.pem'
+}
+
 
 class MapManager(threading.Thread):
     """""
@@ -59,6 +64,7 @@ class MapManager(threading.Thread):
             global ALIAS
             consumer = KafkaConsumer('fromserver',
                                      bootstrap_servers=[f'{self.ip}:{self.port}'],
+                                     # security_protocol='SSL', ssl_config=ssl_config,
                                      auto_offset_reset='earliest',
                                      enable_auto_commit=True,
                                      group_id=f'{ALIAS}'
@@ -142,7 +148,7 @@ class MovementManager(threading.Thread):
                     msg = ALIAS.upper() + SEPARADOR + movement.upper()
                     # Envia a kafka topic: toserver, mensaje
                     producer.send('toserver', msg.encode())
-                    # producer.flush() / producer.poll()
+                    producer.flush()
 
                 # Espera un segundo antes volver a realizar el bucle y poder comprobar valor de END
                 time.sleep(1)
@@ -177,7 +183,7 @@ def login(ip, port) -> bool:
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        context.load_verify_locations(cafile='cert.pem')
+        context.load_verify_locations(cafile='./ssl/cert.pem')
         secure_client = context.wrap_socket(client)
 
         secure_client.connect((ip, port))
@@ -235,12 +241,18 @@ def signinplayerapi(register):
     passwd = input("password: ")
     url = register + f"?alias={alias}&pwd={passwd}"
     logging.info(f"Signin using: {url}")
-    response = requests.post(url, verify=False)
-    data = json.loads(response.text)
-    msg = data['msg']
-    result = data['result']
-    logging.info(msg)
-    print(msg)
+    try:
+        response = requests.post(url, verify=False)
+        response.raise_for_status()
+        data = json.loads(response.text)
+        msg = data['msg']
+        result = data['result']
+        logging.info(msg)
+        print(msg)
+    except requests.exceptions.RequestException as e:
+        # handle the exception
+        logging.error(f'ERROR API registering: {e}')
+        print("It is not possible to sign in. Try again later.")
 
 
 def updateplayerapi(login, update):
@@ -251,22 +263,29 @@ def updateplayerapi(login, update):
     passwd = input("passwd: ")
     url = login + f"?alias={alias}&pwd={passwd}"
     logging.info(f"Logining using: {url}")
-    response = requests.get(url, verify=False)
-    data = json.loads(response.text)
-    result = data['result']
-    msg = data['msg']
-    if result:
-        print("Enter your new alias and password. Leave blank the data you do not want to modify")
-        n_alias = input("new alias: ")
-        n_passwd = input("new password: ")
-        url = update + f"?alias={alias}&nalias={n_alias}&npwd={n_passwd}"
-        logging.info(f"Updating using: {url}")
-        response = requests.post(url, verify=False)
+    try:
+        response = requests.get(url, verify=False)
         data = json.loads(response.text)
         result = data['result']
         msg = data['msg']
+        print(msg)
+        if result:
+            print("Enter your new alias and password. Leave blank the data you do not want to modify")
+            n_alias = input("new alias: ")
+            n_passwd = input("new password: ")
+            url = update + f"?alias={alias}&nalias={n_alias}&npwd={n_passwd}"
+            logging.info(f"Updating using: {url}")
+            response = requests.post(url, verify=False)
+            data = json.loads(response.text)
+            result = data['result']
+            msg = data['msg']
+            print(msg)
+    except requests.exceptions.RequestException as e:
+        # handle the exception
+        logging.error(f'ERROR API updating: {e}')
+        print('It is not possible to update your profile now. Try again later.')
 
-    print(msg)
+
 
 
 def signinplayersocket(ip, port):
@@ -283,7 +302,7 @@ def signinplayersocket(ip, port):
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        context.load_verify_locations(cafile='cert.pem')
+        context.load_verify_locations(cafile='./ssl/cert.pem')
         secure_client = context.wrap_socket(client)
 
         secure_client.connect((ip, port))
@@ -331,7 +350,7 @@ def updateplayersocket(ip, port) -> bool:
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        context.load_verify_locations(cafile='cert.pem')
+        context.load_verify_locations(cafile='./ssl/cert.pem')
         secure_client = context.wrap_socket(client)
 
         secure_client.connect((ip, port))

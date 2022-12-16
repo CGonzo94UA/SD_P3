@@ -60,6 +60,11 @@ logging.basicConfig(
 loggerk = logging.getLogger('kafka')
 loggerk.setLevel(logging.WARN)
 
+ssl_config = {
+    'ssl.key.location': './ssl/key.pem',
+    'ssl.certificate.location': './ssl/cert.pem'
+}
+
 
 class KeypressManager(threading.Thread):
     def __init__(self):
@@ -175,7 +180,7 @@ class LoginManager(threading.Thread):
 
         # Wrap the server socket in an SSL context
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
+        context.load_cert_chain(certfile="./ssl/cert.pem", keyfile="./ssl/key.pem")
         secure_server_socket = context.wrap_socket(self.server, server_side=True)
 
         while True:
@@ -203,17 +208,17 @@ class LoginManager(threading.Thread):
 def updatemap():
     global MAPA
     global FOOD
-    MAPA = [['·' for _ in range(20)] for _ in range(20)]
+    MAPA = [['\U0001F539' for _ in range(20)] for _ in range(20)]
     for index in FOOD:
         x = index[0]
         y = index[1]
-        MAPA[x][y] = '\U0001F353'.center(1)
+        MAPA[x][y] = '\U0001F353'
 
     global MINES
     for index in MINES:
         x = index[0]
         y = index[1]
-        MAPA[x][y] = '\U0001F4A3'.center(1)
+        MAPA[x][y] = '\U0001F4A3'
 
     global NPCs
     for index in NPCs:
@@ -222,16 +227,16 @@ def updatemap():
         y = position[1]
         # Separar alias de NPCs (ej: NPC123456_09)
         level = index.split('_')[1]
-        MAPA[x][y] = str(level).center(1)
+        MAPA[x][y] = str(level)
 
     global PLAYERS
     for index in PLAYERS:
         position = PLAYERS[index]
         x = position[0]
         y = position[1]
-        # Los jugadores se identifican por los dos primeros caracteres de su alias
+        # Los jugadores se identifican por el emoji que se les asigna en la partida
         emoji = EMOJIS[index]
-        MAPA[x][y] = emoji.center(1)
+        MAPA[x][y] = emoji
 
 
 class ReadMovements(threading.Thread):
@@ -319,56 +324,28 @@ class ReadMovements(threading.Thread):
 
     def battlenpcs(self, player, npc):
         global PLAYERS
-        try:
-            con = mysql.connector.connect(**config)
-            cur = con.cursor()
-            sentence = "SELECT nivel, EF, EC FROM Player WHERE alias = %s;"
-            args = (player,)
-            cur.execute(sentence, args)
-            res = cur.fetchone()
-            level = res[0]
-            ef = res[1]
-            ec = res[2]
-            plus = calculateecoref(PLAYERS[player])
+        level = gettotalevel(player)
 
-            if plus == 'EF':
-                level += ef
-            elif plus == 'EC':
-                level += ec
-
-            if level < 0:
-                level = 0
-
-            # Obtiene nivel de NPC
-            levelnpc = int(npc.split('_')[1])
-            # Si son iguales no ocurre nada
-            if level == levelnpc:
-                return
-            elif level > levelnpc:
-                # npc muere
-                alias = npc
-                NPCs.pop(alias)
-                logging.info(f"NPC {alias} has died.")
-                print(f"NPC {alias} has died.")
-            else:
-                # player muere
-                alias = player
-                PLAYERS.pop(alias)
-                resetplayer(alias)
-                logging.info(f"Player {alias} has died.")
-                print(f"Player {alias} has died.")
-            sendmessage(self.producer, alias.upper(), 'END')
-
-        except mysql.connector.Error as err:
-            con.close()
-            if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-                logging.error("Something is wrong with your user name or password")
-            elif err.errno == errorcode.ER_BAD_DB_ERROR:
-                logging.error("Database does not exist")
-            else:
-                logging.error(f"ERROR LOGINING: {err}")
+        # Obtiene nivel de NPC
+        levelnpc = int(npc.split('_')[1])
+        # Si son iguales no ocurre nada
+        if level == levelnpc:
+            return
+        elif level > levelnpc:
+            # npc muere
+            alias = npc
+            NPCs.pop(alias)
+            logging.info(f"NPC {alias} has died.")
+            print(f"NPC {alias} has died.")
         else:
-            con.close()
+            # player muere
+            alias = player
+            PLAYERS.pop(alias)
+            resetplayer(alias)
+            logging.info(f"Player {alias} has died.")
+            print(f"Player {alias} has died.")
+
+        sendmessage(self.producer, alias.upper(), 'END')
 
     def checkplayercollision(self, alias, pos):
         oponent = 'no'
@@ -549,6 +526,7 @@ class ReadMovements(threading.Thread):
 def sendmessage(kafkaproducer, receiver, message):
     msg = 'SERVER' + SEPARADOR + receiver + SEPARADOR + message
     kafkaproducer.send('fromserver', msg.encode())
+    kafkaproducer.flush()
 
 
 def randomposition():
@@ -610,9 +588,8 @@ def savemap():
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        maptosave = maptostring()
         sentence = "UPDATE Game set map = %s, stamp = NOW(), players = %s, npcs = %s, mines = %s, food = %s, characters = %s WHERE id = %s;"
-        args = (maptosave, str(PLAYERS), str(NPCs), str(MINES), str(FOOD), str(EMOJIS), engineId)
+        args = (str(MAPA), str(PLAYERS), str(NPCs), str(MINES), str(FOOD), str(EMOJIS), engineId)
         cur.execute(sentence, args)
         con.commit()
         logging.info('SAVE SUCCESSFULLY')
@@ -678,8 +655,8 @@ def resetplayer(alias):
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        sentence = "UPDATE Player set nivel = %s, niveltotal = %s, EF = %s, EC = %s, emoji = %s where alias = %s;"
-        args = (0, 0, 0, 0, "", alias)
+        sentence = "UPDATE Player set nivel = %s, niveltotal = %s, EF = %s, EC = %s WHERE alias = %s;"
+        args = (0, 0, 0, 0, alias)
         cur.execute(sentence, args)
         con.commit()
         logging.info(f"RESET SUCCESSFULLY")
@@ -781,8 +758,9 @@ def updatelevel(alias, sum):
         if totallevel < 0:
             totallevel = 0
 
-        logging.info(f"Player {alias} has leveled up to level {level}.")
-        print(f"Player {alias} has leveled up to level {level}")
+        if sum > 0:
+            logging.info(f"Player {alias} has leveled up to level {level}.")
+            print(f"Player {alias} has leveled up to level {level}")
 
         sentence = "UPDATE Player SET nivel = %s, niveltotal = %s WHERE alias = %s;"
         args = (level, totallevel, alias)
@@ -901,22 +879,6 @@ def requestcities():
 
     logging.info(CITIES)
 
-"""
-def readCharacters():
-    # leer lista de emojis
-    global CHARACTERS
-    try:
-        with open("Emojis.txt", "r", encoding="UTF-8") as read_file:
-            logging.debug("Converting txt encoded data into Python list")
-            CHARACTERS = numpy.loadtxt(read_file, dtype="str", delimiter="\n")
-            logging.debug(str(CHARACTERS))
-            for index in CHARACTERS:
-                print(index)
-    except Exception as e:
-        logging.error(f'ERROR reading emoji list: {e}')
-        exit()
-"""
-
 
 def checkemoji(emoji):
     for index in EMOJIS:
@@ -935,26 +897,7 @@ def assignemoji(player):
         emoji = CHARACTERS[n]
 
     EMOJIS[player] = emoji
-    try:
-        con = mysql.connector.connect(**config)
-        cur = con.cursor()
-        sentence = "UPDATE Player SET emoji = %s WHERE alias = %s;"
-        args = (emoji, player)
-        cur.execute(sentence, args)
-        con.commit()
-    except mysql.connector.Error as err:
-        con.close()
-        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-            logging.error("Something is wrong with your user name or password")
-        elif err.errno == errorcode.ER_BAD_DB_ERROR:
-            logging.error("Database does not exist")
-        else:
-            logging.error(f"ERROR LOGINING: {err}")
-    else:
-        con.close()
-
-    finally:
-        return emoji
+    return emoji
 
 
 def checkpreviousgame():
@@ -1086,6 +1029,7 @@ def timeouttofinish():
     PLAYERS.clear()
     sendmsg = 'SERVER' + SEPARADOR + msg
     producer.send('toserver', sendmsg.encode())
+    producer.flush()
     resetmaptable()
 
 
@@ -1197,13 +1141,20 @@ if __name__ == '__main__':
                                  bootstrap_servers=[f'{ip_k}:{port_k}'],
                                  auto_offset_reset='earliest',
                                  enable_auto_commit=True,
-                                 group_id=f'engine'
+                                 group_id=f'engine',
+                                 # security_protocol='SSL',
+                                 # ssl_check_hostname=True,
+                                 # ssl_cafile=caRootLocation,
+                                 # ssl_certfile=certLocation,
+                                 # ssl_keyfile=keyLocation,
+                                 # ssl_password=password
                                  )
 
         producer = KafkaProducer(bootstrap_servers=[f'{ip_k}:{port_k}'])
 
     except Exception as e:
-        consumer.close()
+        if 'consumer' in locals():
+            consumer.close()
         logging.error(f'ERROR in kafka: {e}')
 
     # Lista con los hilos que ejecuta el engine: hilos para los login de los jugadores, hilo para leer movimientos
@@ -1221,7 +1172,7 @@ if __name__ == '__main__':
     while True:
 
         if not previousgame:
-            MAPA = [['·' for _ in range(20)] for _ in range(20)]
+            MAPA = [['\U0001F539' for _ in range(20)] for _ in range(20)]
             PLAYERS = {}  # dictionary con los jugadores
             CITIES = {}
             requestcities()
