@@ -105,16 +105,54 @@ body {
   font-variant: small-caps;
 }
 
-#error-message {
-  width: 100px;
-  height: 100px;
-  color: #093d6e;
-  font-size: 24px;
-  font-weight: bold;
+.show-npcs {
+  width: auto; 
+  height: auto;
+  border: 2px solid white;
+  background-color: white;
+  margin: auto;
+  position: absolute;
+  bottom: -150px;
+  right: -20px;
+  border-radius: 10px;
   text-align: center;
+  font-family: "Carter One", sans-serif;
+  font-size: 18px;
+  font-style: normal; 
+  font-variant: small-caps;
 }
 
 
+.show-players {
+  width: auto; 
+  height: auto;
+  border: 2px solid white;
+  background-color: white;
+  margin: auto;
+  position: absolute;
+  bottom: -150px;
+  left: -100px;
+  border-radius: 10px;
+  text-align: center;
+  font-family: "Carter One", sans-serif;
+  font-size: 18px;
+  font-style: normal; 
+  font-variant: small-caps;
+}
+
+#error-message {
+  width: auto;
+  height: auto;
+  margin: auto;
+  position: absolute;
+  top: 35%;
+  color: #093d6e;
+  font-size: 30px;
+  text-align: center;
+  font-family: "Carter One", sans-serif;
+  font-style: normal; 
+  font-variant: small-caps;
+}
 
 .nieve {
   position: absolute;
