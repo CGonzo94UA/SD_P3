@@ -4,5 +4,6 @@
 	"KAFKA": "172.50.0.11:29092",
 	"APIRegister": "https://127.0.0.1:5000/register",
 	"APILogin": "https://127.0.0.1:5000/login",
-	"APIUpdate": "https://127.0.0.1:5000/update"
+	"APIUpdate": "https://127.0.0.1:5000/update",
+	"AESPWD": "againstall"
  }

@@ -5,6 +5,8 @@
 """
 import json
 import logging
+
+import aesEncryptDecrypt
 import ssl
 import threading
 import socket
@@ -25,6 +27,8 @@ global GAME
 global QUEUE
 # Lista con los movimientos validos de un jugador
 MOVEMENTS = ['N', 'S', 'W', 'E', 'NW', 'NE', 'SW', 'SE']
+
+global AESPassword
 
 HEADER = 10
 SEPARADOR = '#'
@@ -64,7 +68,6 @@ class MapManager(threading.Thread):
             global ALIAS
             consumer = KafkaConsumer('fromserver',
                                      bootstrap_servers=[f'{self.ip}:{self.port}'],
-                                     # security_protocol='SSL', ssl_config=ssl_config,
                                      auto_offset_reset='earliest',
                                      enable_auto_commit=True,
                                      group_id=f'{ALIAS}'
@@ -74,8 +77,12 @@ class MapManager(threading.Thread):
             #            while True:
             for message in consumer:
                 message = message.value.decode()
+                msg = eval(message)
+                msg = aesEncryptDecrypt.decrypt(msg, AESPassword)
+                msg = msg.decode()
+
                 # Separar partes del mensaje procedente del servidor
-                msg = message.split(SEPARADOR)
+                msg = msg.split(SEPARADOR)
                 receiver = msg[1]
                 if receiver == 'ALL' or receiver == ALIAS.upper():
                     mensaje = msg[2]
@@ -144,10 +151,12 @@ class MovementManager(threading.Thread):
 
                 if valido:
                     global ALIAS
+
                     # Enviar a kafka un mensaje con el movimiento del jugador
                     msg = ALIAS.upper() + SEPARADOR + movement.upper()
                     # Envia a kafka topic: toserver, mensaje
-                    producer.send('toserver', msg.encode())
+                    message = aesEncryptDecrypt.encrypt(msg, AESPassword)
+                    producer.send('toserver', str(message).encode())
                     producer.flush()
 
                 # Espera un segundo antes volver a realizar el bucle y poder comprobar valor de END
@@ -166,9 +175,23 @@ class MovementManager(threading.Thread):
 
 def updatemap(newmap):
     print(newmap)
-    #if newmap != 'You have joined the game. Waiting for players...' and newmap != 'JOIN':
     if '\n' in newmap:
         print("Choose your next move: N,S,W,E,NW,NE,SW,SE")
+
+
+
+def readpassword():
+    global AESPassword
+    try:
+        with open("AESPassword.json", "r") as read_file:
+            logging.info("Converting JSON encoded data into Python dictionary")
+            pwd = json.load(read_file)
+            logging.info(str(parameters))
+    except Exception as e:
+        logging.error(f'ERROR reading parameters: {e}')
+        exit()
+
+    AESPassword = pwd["AESPWD"]
 
 
 def login(ip, port) -> bool:
@@ -188,8 +211,6 @@ def login(ip, port) -> bool:
 
         secure_client.connect((ip, port))
         ret = communication(secure_client, credentials)
-        # client.connect((ip, port))
-        # ret = communication(client, credentials)
 
         # Obtain the certificate from the server
         server_cert = secure_client.getpeercert(True)
@@ -203,6 +224,7 @@ def login(ip, port) -> bool:
 
             if ret == 'ok':
                 logging.info("SUCCESSFULLY LOGGED IN")
+                readpassword()
             elif ret == 'no':
                 logging.info("ALIAS OR PASSWORD WRONG")
             elif ret == 'in':
@@ -210,6 +232,7 @@ def login(ip, port) -> bool:
             elif ret == 'wait':
                 # En espera para siguiente PARTIDA
                 logging.info("WAITING FOR PLAYERS...")
+                readpassword()
             else:
                 logging.info("Engine has to many connections")
 
@@ -286,8 +309,6 @@ def updateplayerapi(login, update):
         print('It is not possible to update your profile now. Try again later.')
 
 
-
-
 def signinplayersocket(ip, port):
     """
         :param port: int
@@ -308,9 +329,6 @@ def signinplayersocket(ip, port):
         secure_client.connect((ip, port))
         # Obtain the certificate from the server
         server_cert = secure_client.getpeercert(True)
-
-        #client.connect((ip, port))
-        #ret = communication(client, credentials)
 
         if not server_cert:
             logging.error("Unable to retrieve server certificate")
@@ -352,11 +370,7 @@ def updateplayersocket(ip, port) -> bool:
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
         context.load_verify_locations(cafile='./ssl/cert.pem')
         secure_client = context.wrap_socket(client)
-
         secure_client.connect((ip, port))
-
-        # client.connect((ip, port))
-        # ret = communication(client, credentials)
 
         # Obtain the certificate from the server
         server_cert = secure_client.getpeercert(True)

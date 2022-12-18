@@ -8,6 +8,8 @@ import json
 import logging
 import random
 import re
+
+import aesEncryptDecrypt
 import ssl
 import time
 import threading
@@ -36,6 +38,7 @@ global DBIP
 global DBPORT
 global config
 global API_KEY
+global AESPassword
 
 HEADER = 10
 SEPARADOR = '#'
@@ -252,11 +255,13 @@ class ReadMovements(threading.Thread):
     def run(self):
         logging.info('START ReadMovements')
 
-        #       while True:
         for message in self.consumer:
             message = message.value.decode()
+            msg = eval(message)
+            msg = aesEncryptDecrypt.decrypt(msg, AESPassword)
+            msg = msg.decode()
             # Se procesa mensaje y se envia a todos
-            self.processmsg(message)
+            self.processmsg(msg)
             # Comprueba si hay un jugador solo y es el ganador
             if self.checkwin():
                 return
@@ -525,7 +530,8 @@ class ReadMovements(threading.Thread):
 
 def sendmessage(kafkaproducer, receiver, message):
     msg = 'SERVER' + SEPARADOR + receiver + SEPARADOR + message
-    kafkaproducer.send('fromserver', msg.encode())
+    message = aesEncryptDecrypt.encrypt(msg, AESPassword)
+    kafkaproducer.send('fromserver', str(message).encode())
     kafkaproducer.flush()
 
 
@@ -822,17 +828,23 @@ def saveposition(alias, position):
 
 
 def maptosend():
+    global MAPA
     stringcities = []
     string = ''
+    list = []
     for index in QUADRANTS:
         nextcity = QUADRANTS[index]
         stringcities.append(nextcity + ': ' + str(CITIES[nextcity]) + 'ºC')
 
-    string += '\n' + stringcities[0] + '\t\t\t\t' + stringcities[1] + '\n'
-    string += maptostring()
-    string += '\n' + stringcities[2] + '\t\t\t\t' + stringcities[3] + '\n'
+    list.append(stringcities[0] + '\t\t\t\t' + stringcities[1])
+    list.append(MAPA)
+    list.append(stringcities[2] + '\t\t\t\t' + stringcities[3])
 
-    return string
+    #string += stringcities[0] + '\t\t\t\t' + stringcities[1] + '\n'
+    #string += maptostring()
+    #string += '\n' + stringcities[2] + '\t\t\t\t' + stringcities[3]
+    #return string
+    return str(list)
 
 
 def maptostring():
@@ -963,7 +975,7 @@ def resetmaptable():
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        sentence = "DELETE FROM Game"
+        sentence = "TRUNCATE TABLE Game"
         cur.execute(sentence)
         con.commit()
         logging.warning(f"DELETED ROWS FROM MAP TABLE")
@@ -1028,9 +1040,24 @@ def timeouttofinish():
 
     PLAYERS.clear()
     sendmsg = 'SERVER' + SEPARADOR + msg
-    producer.send('toserver', sendmsg.encode())
+    message = aesEncryptDecrypt.encrypt(sendmsg, AESPassword)
+    producer.send('toserver', str(message).encode())
     producer.flush()
     resetmaptable()
+
+
+def readpassword():
+    global AESPassword
+    try:
+        with open("AESPassword.json", "r") as read_file:
+            logging.info("Converting JSON encoded data into Python dictionary")
+            pwd = json.load(read_file)
+            logging.info(str(parameters))
+    except Exception as e:
+        logging.error(f'ERROR reading parameters: {e}')
+        exit()
+
+    AESPassword = pwd["AESPWD"]
 
 
 def checkargs(engine, numplayers, mysql, kafka) -> bool:
@@ -1141,13 +1168,7 @@ if __name__ == '__main__':
                                  bootstrap_servers=[f'{ip_k}:{port_k}'],
                                  auto_offset_reset='earliest',
                                  enable_auto_commit=True,
-                                 group_id=f'engine',
-                                 # security_protocol='SSL',
-                                 # ssl_check_hostname=True,
-                                 # ssl_cafile=caRootLocation,
-                                 # ssl_certfile=certLocation,
-                                 # ssl_keyfile=keyLocation,
-                                 # ssl_password=password
+                                 group_id=f'engine'
                                  )
 
         producer = KafkaProducer(bootstrap_servers=[f'{ip_k}:{port_k}'])
@@ -1168,6 +1189,9 @@ if __name__ == '__main__':
 
     read.start()
     GAME = False
+
+    readpassword()
+
     # Inicia bucle inifinito, para estar siempre ejecutandose. Forma de parar servidor, ctlr+c en consola
     while True:
 
