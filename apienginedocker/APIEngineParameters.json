@@ -1,8 +1,6 @@
 {
-	"ADDRESS": "172.50.0.13:4048",
 	"MYSQL": "172.50.0.12:3307",
 	"DATABASE": "againstall",
 	"USER": "clara",
-	"PWD": "sd2022",
-	"MAXCONNECTIONS": 20
+	"PWD": "sd2022"
  }

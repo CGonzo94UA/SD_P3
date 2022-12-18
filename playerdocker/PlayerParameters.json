@@ -1,5 +1,9 @@
 {
-	"ENGINE": "172.30.0.14:5054",
-	"REGISTRY": "172.30.0.12:4048",
-	"KAFKA": "172.30.0.11:29092"
+	"ENGINE": "172.50.0.14:5054",
+	"REGISTRY": "172.50.0.13:4048",
+	"KAFKA": "172.50.0.11:29092",
+	"APIRegister": "https://172.50.0.13:5000/register",
+	"APILogin": "https://172.50.0.13:5000/login",
+	"APIUpdate": "https://172.50.0.13:5000/update",
+	"AESPWD": "againstall"
  }

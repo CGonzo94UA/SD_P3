@@ -5,7 +5,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.30.0.0/16
+        - subnet: 172.50.0.0/16
       driver: default
 
 services:
@@ -18,7 +18,7 @@ services:
       - 22181:2181
     networks:
       againstall:
-        ipv4_address: 172.30.0.10
+        ipv4_address: 172.50.0.10
         aliases:
           - zookeeper
 
@@ -31,52 +31,84 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://172.30.0.11:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://172.50.0.11:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     networks:
       againstall:
-        ipv4_address: 172.30.0.11
+        ipv4_address: 172.50.0.11
         aliases:
           - kafka
   
+  mysql:
+    image: mysql:8.0
+    cap_add:
+      - SYS_NICE
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'againstall'
+      MYSQL_USER: 'clara'
+      MYSQL_PASSWORD: 'sd2022'
+      MYSQL_ROOT_PASSWORD: 'sd2022'
+    ports:
+      - 3307:3307
+    expose:
+      - 3306
+    volumes:
+      - mysql_config:/etc/mysql:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      againstall:
+        ipv4_address: 172.50.0.12
+        aliases:
+          - mysql
+    
+  adminer:
+    image: adminer
+    restart: always
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    ports:
+      - 8080:8080
+    networks:
+      againstall:
+        ipv4_address: 172.50.0.17
+        aliases:
+          - adminer
+
   aa_registry:
     build: ./registrydocker
+    depends_on:
+      - mysql
     stdin_open: true
     tty: true
+    ports:
+      - 5000:5000
+    volumes:
+      - logs:/logs/
+      - ssl:/ssl/
     networks:
       againstall:
-        ipv4_address: 172.30.0.12
+        ipv4_address: 172.50.0.13
         aliases:
           - aa_registry
-    volumes: 
-      - database-volume:/db/   
-
-  aa_weather:
-    build: ./weatherdocker
-    stdin_open: true
-    tty: true
-    networks:
-      againstall:
-        ipv4_address: 172.30.0.13
-        aliases:
-          - aa_weather
 
   aa_engine:
     build: ./enginedocker
     depends_on:
       - kafka
-      - aa_weather
+      - mysql
     stdin_open: true
     tty: true
+    volumes:
+      - logs:/logs/
+      - ssl:/ssl/
     networks:
       againstall:
-        ipv4_address: 172.30.0.14
+        ipv4_address: 172.50.0.14
         aliases:
           - aa_engine
-    volumes: 
-      - database-volume:/db/
     
   aa_npc:
     build: ./npcdocker
@@ -84,9 +116,11 @@ services:
       - kafka
     stdin_open: true
     tty: true
+    volumes:
+      - logs:/logs/
     networks:
       againstall:
-        ipv4_address: 172.30.0.15
+        ipv4_address: 172.50.0.15
         aliases:
           - aa_npc
 
@@ -96,11 +130,56 @@ services:
       - kafka
     stdin_open: true
     tty: true
+    volumes:
+      - logs:/logs/
+      - ssl:/ssl/
     networks:
       againstall:
-        ipv4_address: 172.30.0.16
+        ipv4_address: 172.50.0.16
         aliases:
           - aa_player
 
+  api_engine:
+    build: ./apienginedocker
+    depends_on:
+      - aa_engine
+      - mysql
+    ports:
+      - 3000:3000
+    stdin_open: true
+    tty: true
+    volumes:
+      - logs:/logs/
+    networks:
+      againstall:
+        ipv4_address: 172.50.0.18
+        aliases:
+          - api_engine
+    
+  front:
+    build: ./frontdocker
+    ports:
+      - 9090:9090
+    expose:
+     - 9090
+    networks:
+      againstall:
+        ipv4_address: 172.50.0.19
+        aliases:
+          - front
+
 volumes:
-  database-volume:
+  mysql:
+  mysql_config:
+  logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/$USER/logs
+  ssl:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/$USER/ssl

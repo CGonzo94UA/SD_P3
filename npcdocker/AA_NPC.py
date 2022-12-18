@@ -1,7 +1,5 @@
 """
     Clara Gonzalez Sanchez
-    Ivan Cano Del Molino
-
 
     Clase que representa un jugador de la partida
 """
@@ -14,10 +12,17 @@ import time
 
 from kafka import KafkaConsumer, KafkaProducer
 
-logging.basicConfig(filename="logfileNPC.log",
-                    format='%(asctime)s %(message)s',
-                    filemode='w')
+import aesEncryptDecrypt
 
+logging.basicConfig(
+    filename="./logs/NPC.log",
+    format='%(asctime)s : %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S %Z',
+    filemode='w',
+    level=logging.DEBUG)
+
+# String con la contrasenya para encriptar con AES
+global AESPassword
 # String que guarda el alias del jugador
 global ALIAS
 # Variable que indica si la partida se ha finalizado para este jugador
@@ -53,8 +58,11 @@ class MapManager(threading.Thread):
             global END
             for message in consumer:
                 message = message.value.decode()
+                msg = eval(message)
+                msg = aesEncryptDecrypt.decrypt(msg, AESPassword)
+                msg = msg.decode()
                 # Separar partes del mensaje procedente del servidor
-                msg = message.split(SEPARADOR)
+                msg = msg.split(SEPARADOR)
                 receiver = msg[1]
                 if receiver == 'ALL' or receiver == 'NPC' or receiver == ALIAS.upper():
                     mensaje = msg[2]
@@ -75,7 +83,7 @@ class MapManager(threading.Thread):
                         END = True
                         return
                     else:
-                        updatemap(mensaje)
+                        print(mensaje)
         except Exception as e:
             consumer.close()
             logging.error(f"ERROR in MapManager: {e}")
@@ -83,6 +91,7 @@ class MapManager(threading.Thread):
             if 'consumer' in locals():
                 consumer.close()
             logging.info("END MapManager")
+
 
 class MovementManager(threading.Thread):
     """""
@@ -100,7 +109,9 @@ class MovementManager(threading.Thread):
             producer = KafkaProducer(bootstrap_servers=[f'{self.ip}:{self.port}'])
             global ALIAS
             msg = ALIAS.upper() + SEPARADOR + 'has entered'
-            producer.send('toserver', msg.encode())
+            message = aesEncryptDecrypt.encrypt(msg, AESPassword)
+            producer.send('toserver', str(message).encode())
+            producer.flush()
             global END
             while not END:
                 rand = random.randint(0, 7)
@@ -108,9 +119,11 @@ class MovementManager(threading.Thread):
 
                 # Enviar a kafka un mensaje con el movimiento
                 msg = ALIAS.upper() + SEPARADOR + movement
+                print(msg)
                 # Envia a kafka topic: toserver, mensaje
-                producer.send('toserver', msg.encode())
-                # producer.flush() / producer.poll()
+                message = aesEncryptDecrypt.encrypt(msg, AESPassword)
+                producer.send('toserver', str(message).encode())
+                producer.flush()
 
                 # Espera un segundo antes volver a realizar el bucle y generar nuevo movimiento
                 time.sleep(5)
@@ -125,8 +138,10 @@ class MovementManager(threading.Thread):
                 producer.close()
             logging.info("END MovementManager")
 
+
 def updatemap(newmap):
     print(newmap)
+
 
 def checkargs(kafka) -> bool:
     """
@@ -142,6 +157,7 @@ def checkargs(kafka) -> bool:
         return False
 
     return True
+
 
 if __name__ == '__main__':
 
@@ -162,6 +178,9 @@ if __name__ == '__main__':
     kafkadir = parameters["KAFKA"].split(":")
     ip_k = kafkadir[0]
     port_k = int(kafkadir[1])
+
+    global AESPassword
+    AESPassword = parameters["AESPWD"]
 
     global ALIAS
     level = random.randint(1, 15)

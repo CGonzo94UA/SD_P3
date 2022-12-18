@@ -1,28 +1,44 @@
 """
     Clara Gonzalez
-    Ivan Cano
     Modulo de principal del programa.
 """
+import binascii
+import hashlib
 import json
 import logging
 import random
 import re
+import warnings
+
+import aesEncryptDecrypt
+import ssl
 import time
 import threading
 import socket
-import sqlite3
-import os
-
+import mysql.connector
+from mysql.connector import errorcode
+import requests
 from kafka import KafkaConsumer, KafkaProducer
 
+global engineId
+global IP
 global PORT
-global DATABASE
 global MAXPLAYERS
 global PLAYERS
 global CITIES
 global GAME
 global MAPA
 global QUEUEPLAYERS
+global EMOJIS
+global CHARACTERS
+global DATABASE
+global USERDB
+global PWDDB
+global DBIP
+global DBPORT
+global config
+global API_KEY
+global AESPassword
 
 HEADER = 10
 SEPARADOR = '#'
@@ -34,20 +50,22 @@ NPCs = {}
 QUADRANTS = {}
 CITIES = {}  # diccionario con las ciudades y temperaturas
 PLAYERS = {}
+EMOJIS = {}
+CHARACTERS = ["\U0001F435", "\U0001F436", "\U0001F43A", "\U0001F98A", "\U0001F99D", "\U0001F431", "\U0001F981",
+              "\U0001F42F", "\U0001F434", "\U0001F993", "\U0001F42E", "\U0001F428", "\U0001F43C", "\U0001F438", "\U0001F437"]
 
-logging.basicConfig(filename="logfileEngine.log",
-                    format='%(asctime)s %(message)s',
-                    filemode='w')
+logging.basicConfig(
+    filename="./logs/Engine.log",
+    format='%(asctime)s : %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S %Z',
+    filemode='w',
+    level=logging.DEBUG)
 
 loggerk = logging.getLogger('kafka')
 loggerk.setLevel(logging.WARN)
 
-# Creating an object
-logger = logging.getLogger()
-
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.DEBUG)
-
+# suppress warning messages
+warnings.filterwarnings("ignore")
 
 class KeypressManager(threading.Thread):
     def __init__(self):
@@ -79,18 +97,43 @@ class LoginManager(threading.Thread):
             logging.error(f'ERROR BINDING {ip}:{port}', e)
 
     def login(self, ali, psw) -> bool:
-        con = sqlite3.connect(DATABASE)
-        cur = con.cursor()
-        res = False
+        result = False
+
         try:
-            cur.execute("SELECT alias, passwd FROM player WHERE alias = ? AND passwd = ?", (ali, psw))
-            query = cur.fetchall()
-            res = len(query) != 0
-        except sqlite3.Error as error:
-            logging.error(f'ERROR LOGIN {error}')
-        finally:
+            con = mysql.connector.connect(**config)
+            cur = con.cursor()
+            sentence = "SELECT passwd, salt FROM Player WHERE alias = %s;"
+            args = (ali,)
+            cur.execute(sentence, args)
+            query = cur.fetchone()
+            hashed_password_hex = query[0]
+            salt = binascii.unhexlify(query[1])
+
+            # Hash the salted password with SHA-256
+            hashed_entered_password = hashlib.pbkdf2_hmac('sha256', psw.encode(), salt, 10000)
+            hashed_password = binascii.unhexlify(hashed_password_hex)
+
+            if hashed_entered_password == hashed_password:
+                logging.debug('Password is correct')
+                result = True
+            else:
+                logging.debug('Password is incorrect')
+                result = False
+
+        except mysql.connector.Error as err:
+            result = False
             con.close()
-            return res
+            if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+                logging.error("Something is wrong with your user name or password")
+            elif err.errno == errorcode.ER_BAD_DB_ERROR:
+                logging.error("Database does not exist")
+            else:
+                logging.error(f"ERROR LOGINING: {err}")
+        else:
+            con.close()
+
+        finally:
+            return result
 
     def handle_client(self, connection, address):
         logging.info(f"NEW CONNECTION: {address}")
@@ -135,16 +178,23 @@ class LoginManager(threading.Thread):
         logging.info(f"LISTENING TO {IP}:{PORT}")
         n_connections = threading.active_count() - 1
         logging.info(f"CURRENT CONNECTIONS: {n_connections}")
+
+        # Wrap the server socket in an SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        context.load_cert_chain(certfile="./ssl/cert.pem", keyfile="./ssl/key.pem")
+        secure_server_socket = context.wrap_socket(self.server, server_side=True)
+
         while True:
             try:
-                conn, addr = self.server.accept()
-                n_connections = threading.active_count()
+                conn, addr = secure_server_socket.accept()
+                # conn, addr = self.server.accept()
+                n_connections = threading.active_count() - 2
+
                 if n_connections >= MAX_CONNECTIONS:
                     logging.warning("MAX CONNECTIONS REACHED")
                     print("MAX CONNECTIONS REACHED")
                     conn.send(b'THE SERVER HAS EXCEEDED THE LIMIT OF CONNECTIONS')
                     conn.close()
-                    n_connections = threading.active_count() - 1
                 else:
                     thread = threading.Thread(target=self.handle_client, args=(conn, addr))
                     thread.start()
@@ -153,24 +203,23 @@ class LoginManager(threading.Thread):
                     logging.info(f"REMAINING CONNECTIONS: {MAX_CONNECTIONS - n_connections}")
 
             except Exception as exc:
-                logging.error('Error accepting connections')
-                logging.error('ERROR: ', exc)
+                logging.error(f"Error accepting connections: {exc}")
 
 
 def updatemap():
     global MAPA
     global FOOD
-    MAPA = [[' ' for _ in range(20)] for _ in range(20)]
+    MAPA = [['\U0001F539' for _ in range(20)] for _ in range(20)]
     for index in FOOD:
         x = index[0]
         y = index[1]
-        MAPA[x][y] = 'A'.center(3)
+        MAPA[x][y] = '\U0001F353'
 
     global MINES
     for index in MINES:
         x = index[0]
         y = index[1]
-        MAPA[x][y] = 'M'.center(3)
+        MAPA[x][y] = '\U0001F4A3'
 
     global NPCs
     for index in NPCs:
@@ -179,15 +228,16 @@ def updatemap():
         y = position[1]
         # Separar alias de NPCs (ej: NPC123456_09)
         level = index.split('_')[1]
-        MAPA[x][y] = str(level).center(3)
+        MAPA[x][y] = str(level)
 
     global PLAYERS
     for index in PLAYERS:
         position = PLAYERS[index]
         x = position[0]
         y = position[1]
-        # Los jugadores se identifican por los dos primeros caracteres de su alias
-        MAPA[x][y] = index[0:2].center(3)
+        # Los jugadores se identifican por el emoji que se les asigna en la partida
+        emoji = EMOJIS[index]
+        MAPA[x][y] = emoji
 
 
 class ReadMovements(threading.Thread):
@@ -203,11 +253,13 @@ class ReadMovements(threading.Thread):
     def run(self):
         logging.info('START ReadMovements')
 
-        #       while True:
         for message in self.consumer:
             message = message.value.decode()
+            msg = eval(message)
+            msg = aesEncryptDecrypt.decrypt(msg, AESPassword)
+            msg = msg.decode()
             # Se procesa mensaje y se envia a todos
-            self.processmsg(message)
+            self.processmsg(msg)
             # Comprueba si hay un jugador solo y es el ganador
             if self.checkwin():
                 return
@@ -254,107 +306,49 @@ class ReadMovements(threading.Thread):
 
     def battleplayers(self, player1, player2):
         global PLAYERS
-        con = sqlite3.connect(DATABASE)
-        cur = con.cursor()
-        try:
-            query = cur.execute("SELECT nivel, EF, EC FROM player WHERE alias = ?", (player1,))
-            res = query.fetchone()
-            level1 = res[0]
-            ef1 = res[1]
-            ec1 = res[2]
-            # Se calcula una sola vez porque estan en el mismo cuadrante
-            plus = calculateecoref(PLAYERS[player1])
+        level1 = gettotalevel(player1)
+        level2 = gettotalevel(player2)
 
-            if plus == 'EF':
-                level1 += ef1
-            elif plus == 'EC':
-                level1 += ec1
+        # Si son iguales no ocurre nada
+        if level1 == level2:
+            return
+        elif level1 > level2:
+            # player2 muere
+            alias = player2
+        else:
+            # player1 muere
+            alias = player1
 
-            if level1 < 0:
-                level1 = 0
-
-            print(f'{player1} level: ' + str(level1))
-
-            query = cur.execute("SELECT nivel, EF, EC FROM player WHERE alias = ?", (player2,))
-            res = query.fetchone()
-            level2 = res[0]
-            ef2 = res[1]
-            ec2 = res[2]
-
-            if plus == 'EF':
-                level2 += ef2
-            elif plus == 'EC':
-                level2 += ec2
-
-            if level2 < 0:
-                level2 = 0
-
-            print(f'{player2} level: ' + str(level2))
-
-            # Si son iguales no ocurre nada
-            if level1 == level2:
-                return
-            elif level1 > level2:
-                # player2 muere
-                alias = player2
-            else:
-                # player1 muere
-                alias = player1
-
-            PLAYERS.pop(alias)
-            logging.info(f"Player {alias} has died.")
-            sendmessage(self.producer, alias.upper(), 'END')
-            # Resetear a 0 leve, EC, EF del jugador que acaba de moriri
-            resetplayer(alias)
-        except sqlite3.Error as error:
-            logging.error(f"ERROR in SELECT {error}")
-        finally:
-            con.close()
+        PLAYERS.pop(alias)
+        logging.info(f"Player {alias} has died.")
+        sendmessage(self.producer, alias.upper(), 'END')
+        # Resetear a 0 leve, EC, EF del jugador que acaba de morir
+        resetplayer(alias)
 
     def battlenpcs(self, player, npc):
         global PLAYERS
-        con = sqlite3.connect(DATABASE)
-        cur = con.cursor()
-        try:
-            query = cur.execute("SELECT nivel, EF, EC FROM player WHERE alias = ?", (player,))
-            res = query.fetchone()
-            level = res[0]
-            ef = res[1]
-            ec = res[2]
-            plus = calculateecoref(PLAYERS[player])
+        level = gettotalevel(player)
 
-            if plus == 'EF':
-                level += ef
-            elif plus == 'EC':
-                level += ec
+        # Obtiene nivel de NPC
+        levelnpc = int(npc.split('_')[1])
+        # Si son iguales no ocurre nada
+        if level == levelnpc:
+            return
+        elif level > levelnpc:
+            # npc muere
+            alias = npc
+            NPCs.pop(alias)
+            logging.info(f"NPC {alias} has died.")
+            print(f"NPC {alias} has died.")
+        else:
+            # player muere
+            alias = player
+            PLAYERS.pop(alias)
+            resetplayer(alias)
+            logging.info(f"Player {alias} has died.")
+            print(f"Player {alias} has died.")
 
-            if level < 0:
-                level = 0
-
-            # Obtiene nivel de NPC
-            levelnpc = int(npc.split('_')[1])
-            # Si son iguales no ocurre nada
-            if level == levelnpc:
-                return
-            elif level > levelnpc:
-                # npc muere
-                alias = npc
-                NPCs.pop(alias)
-                logging.info(f"NPC {alias} has died.")
-                print(f"NPC {alias} has died.")
-            else:
-                # player muere
-                alias = player
-                PLAYERS.pop(alias)
-                resetplayer(alias)
-                logging.info(f"Player {alias} has died.")
-                print(f"Player {alias} has died.")
-            sendmessage(self.producer, alias.upper(), 'END')
-
-        except sqlite3.Error as error:
-            logging.error(f'ERROR in SELECT: {error}')
-        finally:
-            con.close()
+        sendmessage(self.producer, alias.upper(), 'END')
 
     def checkplayercollision(self, alias, pos):
         oponent = 'no'
@@ -403,8 +397,6 @@ class ReadMovements(threading.Thread):
             # Jugador pisa alimento -> sube de nivel
             FOOD.remove(pos)
             updatelevel(alias, 1)
-            logging.info(f"Player {alias} has leveled up.")
-            print(f"Player {alias} has leveled up.")
 
     def checkNPCjoin(self, alias, msg):
         regex = 'NPC[0-9]{6}_[0-9]'
@@ -452,6 +444,7 @@ class ReadMovements(threading.Thread):
                         PLAYERS[alias] = newposition
 
                         saveposition(alias, newposition)
+                        updatelevel(alias, 0)
                         # Comprueba si hay colisiones con mina, alimento, NPC u otros jugadores
                         self.checkcollisions(alias, newposition)
 
@@ -535,7 +528,9 @@ class ReadMovements(threading.Thread):
 
 def sendmessage(kafkaproducer, receiver, message):
     msg = 'SERVER' + SEPARADOR + receiver + SEPARADOR + message
-    kafkaproducer.send('fromserver', msg.encode())
+    message = aesEncryptDecrypt.encrypt(msg, AESPassword)
+    kafkaproducer.send('fromserver', str(message).encode())
+    kafkaproducer.flush()
 
 
 def randomposition():
@@ -593,19 +588,46 @@ def generatemines():
 
 
 def savemap():
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
     global MAPA
     try:
-        map = maptostring()
-        cur.execute(
-            "INSERT INTO game (map, timestamp, players, npcs, cities, quadrants, mines, food) VALUES (?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?);",
-            (map, str(PLAYERS), str(NPCs), str(CITIES), str(QUADRANTS), str(MINES), str(FOOD)))
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "UPDATE Game set map = %s, stamp = NOW(), players = %s, npcs = %s, mines = %s, food = %s, characters = %s WHERE id = %s;"
+        args = (str(MAPA), str(PLAYERS), str(NPCs), str(MINES), str(FOOD), str(EMOJIS), engineId)
+        cur.execute(sentence, args)
         con.commit()
         logging.info('SAVE SUCCESSFULLY')
-    except sqlite3.Error as error:
-        logging.error(f'ERROR SAVING {error}')
-    finally:
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR SAVING MAP: {err}")
+    else:
+        con.close()
+
+
+def initializeGameTable():
+    global MAPA
+    try:
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "INSERT INTO Game (id, stamp, cities, quadrants) VALUES (%s, NOW(), %s, %s);"
+        args = (engineId, str(CITIES), str(QUADRANTS))
+        cur.execute(sentence, args)
+        con.commit()
+        logging.info('SAVE SUCCESSFULLY')
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR INITIALIZING GAME TABLE: {err}")
+    else:
         con.close()
 
 
@@ -613,28 +635,44 @@ def resetecef(player):
     ec = random.randint(-10, 10)
     ef = random.randint(-10, 10)
 
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
     try:
-        cur.execute("UPDATE player set EF = ?, EC = ? where alias = ?", (ef, ec, player))
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "UPDATE Player set EF = %s, EC = %s where alias = %s;"
+        args = (ef, ec, player)
+        cur.execute(sentence, args)
         con.commit()
         logging.info(f"SAVE SUCCESSFULLY")
-    except sqlite3.Error as error:
-        logging.error(f'ERROR RESET EC EF: {error}')
-    finally:
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR RESETING EC EF: {err}")
+    else:
         con.close()
 
 
 def resetplayer(alias):
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
     try:
-        cur.execute("UPDATE player set nivel = ?, EF = ?, EC = ? where alias = ?", (0, 0, 0, alias))
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "UPDATE Player set nivel = %s, niveltotal = %s, EF = %s, EC = %s WHERE alias = %s;"
+        args = (0, 0, 0, 0, alias)
+        cur.execute(sentence, args)
         con.commit()
         logging.info(f"RESET SUCCESSFULLY")
-    except sqlite3.Error as error:
-        logging.error(f'ERROR RESET PLAYER {error}')
-    finally:
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR RESETING Player: {err}")
+    else:
         con.close()
 
 
@@ -676,65 +714,135 @@ def calculatequadrant(position):
     return quadrant
 
 
-def updatelevel(alias, sum):
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
+def gettotalevel(player):
     try:
-        query = cur.execute("SELECT nivel FROM player WHERE alias = ?", (alias,))
-        res = query.fetchone()
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "SELECT niveltotal FROM Player WHERE alias = %s;"
+        args = (player,)
+        cur.execute(sentence, args)
+        res = cur.fetchone()
+        level = res[0]
+        logging.debug(f'{player} level: ' + str(level))
+        return level
+
+    except mysql.connector.Error as err:
+        level = 0
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR IN SELECT: {err}")
+        return level
+    else:
+        con.close()
+
+
+def updatelevel(alias, sum):
+    try:
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "SELECT nivel, EF, EC FROM Player WHERE alias = %s;"
+        args = (alias,)
+        cur.execute(sentence, args)
+        res = cur.fetchone()
         level = res[0] + sum
-        cur.execute("UPDATE player SET nivel = ? WHERE alias = ?", (level, alias))
+        ef = res[1]
+        ec = res[2]
+        plus = calculateecoref(PLAYERS[alias])
+
+        totallevel = level
+        if plus == 'EF':
+            totallevel += ef
+        elif plus == 'EC':
+            totallevel += ec
+
+        if totallevel < 0:
+            totallevel = 0
+
+        if sum > 0:
+            logging.info(f"Player {alias} has leveled up to level {level}.")
+            print(f"Player {alias} has leveled up to level {level}")
+
+        sentence = "UPDATE Player SET nivel = %s, niveltotal = %s WHERE alias = %s;"
+        args = (level, totallevel, alias)
+        cur.execute(sentence, args)
         con.commit()
-    except sqlite3.Error as error:
-        logging.error(f'ERROR UPDATING LEVEL: {error}')
-    finally:
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+    else:
         con.close()
 
 
 def resetlevel(alias):
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
     level = 1
     try:
-        cur.execute("UPDATE player SET nivel = ? WHERE alias = ?", (level, alias))
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "UPDATE Player SET nivel = %s, niveltotal = %s WHERE alias = %s;"
+        args = (level, 0, alias)
+        cur.execute(sentence, args)
         con.commit()
         logging.info("UPDATE")
-    except sqlite3.Error as error:
-        logging.error(f'ERROR RESETING LEVEL: {error}')
-    finally:
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+    else:
         con.close()
 
 
 def saveposition(alias, position):
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
     try:
-        cur.execute("UPDATE player SET posicion = ? WHERE alias = ?", (str(position), alias))
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "UPDATE Player SET posicion = %s WHERE alias = %s;"
+        args = (str(position), alias)
+        cur.execute(sentence, args)
         con.commit()
         logging.info("Saved position")
-    except sqlite3.Error as error:
-        logging.error(f'ERROR SAVING POSITION {error}')
-    finally:
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+    else:
         con.close()
 
 
 def maptosend():
+    global MAPA
     stringcities = []
     string = ''
     for index in QUADRANTS:
         nextcity = QUADRANTS[index]
         stringcities.append(nextcity + ': ' + str(CITIES[nextcity]) + 'ºC')
 
-    string += '\n' + stringcities[0] + '\t\t\t\t\t\t\t' + stringcities[1] + '\n'
+    string += stringcities[0] + '\t\t\t\t' + stringcities[1] + '\n'
     string += maptostring()
-    string += '\n' + stringcities[2] + '\t\t\t\t\t\t\t' + stringcities[3] + '\n'
-
+    string += '\n' + stringcities[2] + '\t\t\t\t' + stringcities[3]
     return string
 
 
 def maptostring():
+
     string = ''
-    string += ('\n'.join([' '.join(['{:3}'.format(item) for item in row])
+    string += ('\n'.join([' '.join(['{:1}'.format(item) for item in row])
                           for row in MAPA]))
     return string
 
@@ -752,40 +860,52 @@ def communication(client, message) -> str:
     return respuesta
 
 
-def requestcities(ip, port):
+def requestcities():
+    # leer lista de ciudades
     global CITIES
-    numbers = []  # lista de numeros para comprobar que no se repiten
-    counter = 0
-    while counter < 4:
-        n = random.randint(1, 20)
-        if n not in numbers:
-            numbers.append(n)
-            try:
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.connect((ip, port))
-                msg = f"{n}"
-                ret = communication(client, msg)
-                if ret == 'Error':
-                    logging.error("It is not possible to get the city")
-                else:
-                    datos = ret.split(':')
-                    ciudad = datos[0]
-                    temperatura = datos[1]
-                    CITIES[ciudad] = temperatura
-                    counter += 1
+    try:
+        with open("Cities.txt", "r") as read_file:
+            logging.debug("Converting txt encoded data into Python list")
+            listcities = read_file.read().splitlines()
+            logging.debug(str(listcities))
+    except Exception as e:
+        logging.error(f'ERROR reading list: {e}')
+        exit()
 
-            except Exception as e:
-                logging.error('ERROR requesting the city')
-            finally:
-                if 'client' in locals():
-                    client.close()
+    while len(CITIES) < 4:
+        n = random.randint(0, 19)
+        askCity = listcities[n]
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={askCity}&appid={API_KEY}"
+        response = requests.get(url)
+        data = json.loads(response.text)
+        temp = data["main"]["temp"] - 273.15
+        CITIES[askCity] = round(temp)
+
     logging.info(CITIES)
 
 
+def checkemoji(emoji):
+    for index in EMOJIS:
+        if EMOJIS[index] == emoji:
+            return True
+    return False
+
+
+def assignemoji(player):
+    global EMOJIS
+    n = random.randint(0, len(CHARACTERS)-1)
+    emoji = CHARACTERS[n]
+
+    while checkemoji(emoji):
+        n = random.randint(0, len(CHARACTERS))
+        emoji = CHARACTERS[n]
+
+    EMOJIS[player] = emoji
+    return emoji
+
+
 def checkpreviousgame():
-    # Hay partida previa si alguno de los niveles no esta a 0 y si hay mapa guardado
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
+    # Hay partida previa si hay mapa guardado
     res = False
     global PLAYERS
     global NPCs
@@ -793,9 +913,13 @@ def checkpreviousgame():
     global CITIES
     global MINES
     global FOOD
+    global EMOJIS
     try:
-        cur.execute(
-            "SELECT players, npcs, cities, quadrants, mines, food FROM game WHERE id == (SELECT max(id) FROM game)")
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "SELECT players, npcs, cities, quadrants, mines, food, characters FROM Game WHERE id = %s AND stamp = (SELECT max(stamp) FROM Game);"
+        args = (engineId,)
+        cur.execute(sentence, args)
         query = cur.fetchone()
         # Devuelve tuplas con los datos
         if not query:
@@ -820,43 +944,69 @@ def checkpreviousgame():
                 MINES = eval(mines)
                 food = query[5]
                 FOOD = eval(food)
+                emojis = query[6]
+                EMOJIS = eval(emojis)
 
-    except sqlite3.Error as error:
-        logging.error(f'ERROR CHECKING PREVIOUS GAME {error}')
-    finally:
+    except mysql.connector.Error as err:
+        res = False
         con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+    else:
+        con.close()
+
+    finally:
         return res
 
 
 def resetmaptable():
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
     try:
-        cur.execute("DELETE FROM game")
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "TRUNCATE TABLE Game"
+        cur.execute(sentence)
         con.commit()
         logging.warning(f"DELETED ROWS FROM MAP TABLE")
-    except sqlite3.Error as error:
-        logging.error(f'ERROR DELETING MAP ROWS {error}')
-    finally:
+    except mysql.connector.Error as err:
+        con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+    else:
         con.close()
 
 
 def checkhighestlevel():
-    con = sqlite3.connect(DATABASE)
-    cur = con.cursor()
     winners = []
     try:
-        cur.execute("SELECT alias FROM player WHERE nivel == (SELECT max(nivel) FROM player)")
+        con = mysql.connector.connect(**config)
+        cur = con.cursor()
+        sentence = "SELECT alias FROM player WHERE nivel == (SELECT max(nivel) FROM player);"
+        cur.execute(sentence)
         query = cur.fetchall()
 
         for element in query:
             alias = element[0]
             winners.append(alias)
 
-    except sqlite3.Error as error:
-        logging.error(f'ERROR CHECKING LEVELS {error}')
-    finally:
+    except mysql.connector.Error as err:
         con.close()
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            logging.error("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            logging.error("Database does not exist")
+        else:
+            logging.error(f"ERROR LOGINING: {err}")
+    else:
+        con.close()
+    finally:
         return winners
 
 
@@ -882,11 +1032,27 @@ def timeouttofinish():
 
     PLAYERS.clear()
     sendmsg = 'SERVER' + SEPARADOR + msg
-    producer.send('toserver', sendmsg.encode())
+    message = aesEncryptDecrypt.encrypt(sendmsg, AESPassword)
+    producer.send('toserver', str(message).encode())
+    producer.flush()
     resetmaptable()
 
 
-def checkargs(engine, numplayers, weather, kafka) -> bool:
+def readpassword():
+    global AESPassword
+    try:
+        with open("AESPassword.json", "r") as read_file:
+            logging.info("Converting JSON encoded data into Python dictionary")
+            pwd = json.load(read_file)
+            logging.info(str(parameters))
+    except Exception as e:
+        logging.error(f'ERROR reading parameters: {e}')
+        exit()
+
+    AESPassword = pwd["AESPWD"]
+
+
+def checkargs(engine, numplayers, mysql, kafka) -> bool:
     """
     Comprueba si los parametros recibidos son correctos
     """
@@ -900,7 +1066,7 @@ def checkargs(engine, numplayers, weather, kafka) -> bool:
     regex_1 = '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{1,5}$'
     regex_2 = '^\S+:[0-9]{1,5}$'
     engineaddress = engine
-    weatheraddress = weather
+    dbaddress = mysql
     karfkaaddress = kafka
 
     if not (re.match(regex_1, engineaddress) or re.match(regex_2, engineaddress)):
@@ -908,21 +1074,22 @@ def checkargs(engine, numplayers, weather, kafka) -> bool:
         logging.error("Wrong Engine address")
         return False
 
-    if not (re.match(regex_1, weatheraddress) or re.match(regex_2, weatheraddress)):
-        print("Wrong Weather address")
-        logging.error("Wrong Engine address")
+    if not (re.match(regex_1, dbaddress) or re.match(regex_2, dbaddress)):
+        print("Wrong MySQL address")
+        logging.error("Wrong MySQL address")
         return False
 
     if not (re.match(regex_1, karfkaaddress) or re.match(regex_2, karfkaaddress)):
         print("Wrong Kafka address")
-        logging.error("Wrong Engine address")
+        logging.error("Wrong Kafka address")
         return False
 
     return True
 
 
 if __name__ == '__main__':
-
+    global engineId
+    global IP
     global PORT
     global MAXPLAYERS
     global DATABASE
@@ -947,23 +1114,19 @@ if __name__ == '__main__':
         logging.error(f'ERROR reading parameters: {e}')
         exit()
 
-    if not checkargs(parameters["ADDRESS"], str(parameters["MAXPLAYERS"]), parameters["WEATHER"], parameters["KAFKA"]):
+    if not checkargs(parameters["ADDRESS"], str(parameters["MAXPLAYERS"]), parameters["MYSQL"], parameters["KAFKA"]):
         print("ERROR: Wrong args")
         logging.error("ERROR: Wrong args")
         exit()
 
-    address = parameters["ADDRESS"].split(':')
+    engineId = parameters["ADDRESS"]
+    address = engineId.split(':')
     IP = address[0]
     PORT = int(address[1])
 
     MAXPLAYERS = parameters["MAXPLAYERS"]
-    DATABASE = parameters["DATABASE"]
 
     logging.info('MAX PLAYERS: ' + str(MAXPLAYERS))
-
-    weatherdir = parameters["WEATHER"].split(':')
-    ip_w = weatherdir[0]
-    port_w = int(weatherdir[1])
 
     kafkadir = parameters["KAFKA"].split(":")
     ip_k = kafkadir[0]
@@ -975,6 +1138,22 @@ if __name__ == '__main__':
     TIMELIMITTOFINISH = parameters["TIMELIMITTOFINISH"]
 
     MAX_CONNECTIONS = parameters["MAX_CONNECTIONS"]
+    DATABASE = parameters["DATABASE"]
+    USERDB = parameters["USER"]
+    PWDDB = parameters["PWD"]
+    dbserver = parameters["MYSQL"].split(':')
+    DBIP = dbserver[0]
+    DBPORT = int(dbserver[1])
+
+    API_KEY = parameters["APIKEY"]
+
+    config = {
+        'user': USERDB,
+        'password': PWDDB,
+        'host': DBIP,
+        'database': DATABASE,
+        'raise_on_warnings': True
+    }
 
     try:
         consumer = KafkaConsumer('toserver',
@@ -987,7 +1166,8 @@ if __name__ == '__main__':
         producer = KafkaProducer(bootstrap_servers=[f'{ip_k}:{port_k}'])
 
     except Exception as e:
-        consumer.close()
+        if 'consumer' in locals():
+            consumer.close()
         logging.error(f'ERROR in kafka: {e}')
 
     # Lista con los hilos que ejecuta el engine: hilos para los login de los jugadores, hilo para leer movimientos
@@ -1001,15 +1181,22 @@ if __name__ == '__main__':
 
     read.start()
     GAME = False
+
+    readpassword()
+
     # Inicia bucle inifinito, para estar siempre ejecutandose. Forma de parar servidor, ctlr+c en consola
     while True:
 
         if not previousgame:
-            MAPA = [[' ' for _ in range(20)] for _ in range(20)]
+            MAPA = [['\U0001F539' for _ in range(20)] for _ in range(20)]
             PLAYERS = {}  # dictionary con los jugadores
             CITIES = {}
-            requestcities(ip_w, port_w)
+            requestcities()
             assigncitytoquadrant()
+            initializeGameTable()
+
+            # Lee los emojis para los players
+            # readCharacters()
 
             # Genera los alimentos y las minas del mapa
             generatefood()
@@ -1036,8 +1223,12 @@ if __name__ == '__main__':
                     alias = QUEUEPLAYERS.pop(0)
                     PLAYERS[alias] = pos
                     saveposition(alias, pos)
+                    updatelevel(alias, 0)
                     sendmessage(producer, alias.upper(), 'JOIN')
                     sendmessage(producer, alias.upper(), 'You have joined the game. Waiting for players...')
+                    emoji = assignemoji(alias)
+                    msg = "Your player will be: " + emoji
+                    sendmessage(producer, alias.upper(), msg)
 
             GAME = True
             # Si llega aqui parar el timer y el keypress
