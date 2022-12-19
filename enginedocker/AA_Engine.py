@@ -614,8 +614,8 @@ def initializeGameTable():
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        sentence = "INSERT INTO Game (id, stamp, cities, quadrants) VALUES (%s, NOW(), %s, %s);"
-        args = (engineId, str(CITIES), str(QUADRANTS))
+        sentence = "INSERT INTO Game (id, map, stamp, cities, quadrants) VALUES (%s, %s, NOW(), %s, %s);"
+        args = (engineId, str(MAPA), str(CITIES), str(QUADRANTS))
         cur.execute(sentence, args)
         con.commit()
         logging.info('SAVE SUCCESSFULLY')
@@ -897,7 +897,7 @@ def assignemoji(player):
     emoji = CHARACTERS[n]
 
     while checkemoji(emoji):
-        n = random.randint(0, len(CHARACTERS))
+        n = random.randint(0, len(CHARACTERS)-1)
         emoji = CHARACTERS[n]
 
     EMOJIS[player] = emoji
