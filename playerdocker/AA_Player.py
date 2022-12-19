@@ -75,39 +75,43 @@ class MapManager(threading.Thread):
                 message = message.value.decode()
                 msg = eval(message)
                 msg = aesEncryptDecrypt.decrypt(msg, AESPassword)
-                msg = msg.decode()
+                if msg is not None:
+                    msg = msg.decode()
 
-                # Separar partes del mensaje procedente del servidor
-                msg = msg.split(SEPARADOR)
-                receiver = msg[1]
-                if receiver == 'ALL' or receiver == ALIAS.upper():
-                    mensaje = msg[2]
-                    if mensaje == 'JOIN':
-                        # Player deja de estar en cola y se une a partida
-                        QUEUE = False
+                    # Separar partes del mensaje procedente del servidor
+                    msg = msg.split(SEPARADOR)
+                    receiver = msg[1]
+                    if receiver == 'ALL' or receiver == ALIAS.upper():
+                        mensaje = msg[2]
+                        if mensaje == 'JOIN':
+                            # Player deja de estar en cola y se une a partida
+                            QUEUE = False
 
-                    if not QUEUE:
-                        if mensaje == 'START':
-                            print("START")
-                        elif mensaje == 'END':
-                            # Senyal de muerte para el jugador
-                            print("GAME OVER...")
-                            print("Press Enter to leave the game.")
-                            END = True
-                            return
-                        elif mensaje == 'TIMEOUT':
-                            # Senyal de muerte para el jugador
-                            print("TIME OUT, GAME OVER...")
-                            print("Press Enter to leave the game.")
-                            END = True
-                            return
-                        elif mensaje == 'WIN':
-                            print("CHAMPION!")
-                            END = True
-                            print("Press Enter to leave the game.")
-                            return
-                        else:
-                            updatemap(mensaje)
+                        if not QUEUE:
+                            if mensaje == 'START':
+                                print("START")
+                            elif mensaje == 'END':
+                                # Senyal de muerte para el jugador
+                                print("GAME OVER...")
+                                print("Press Enter to leave the game.")
+                                END = True
+                                return
+                            elif mensaje == 'TIMEOUT':
+                                # Senyal de muerte para el jugador
+                                print("TIME OUT, GAME OVER...")
+                                print("Press Enter to leave the game.")
+                                END = True
+                                return
+                            elif mensaje == 'WIN':
+                                print("CHAMPION!")
+                                END = True
+                                print("Press Enter to leave the game.")
+                                return
+                            else:
+                                updatemap(mensaje)
+                else:
+                    print("It is not possible to decrypt the message.")
+                    logging.info("It is not possible to decrypt the message.")
         except Exception as e:
             consumer.close()
             logging.error(f'ERROR in MapManager: {e}')
@@ -153,7 +157,7 @@ class MovementManager(threading.Thread):
                     # Envia a kafka topic: toserver, mensaje
                     message = aesEncryptDecrypt.encrypt(msg, AESPassword)
                     producer.send('toserver', str(message).encode())
-                    producer.flush()
+                    # producer.flush()
 
                 # Espera un segundo antes volver a realizar el bucle y poder comprobar valor de END
                 time.sleep(1)

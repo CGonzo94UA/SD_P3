@@ -96,6 +96,14 @@ function getGame() {
                   parentElement.appendChild(player);
                 }
 
+            }else{
+              var displayPlayers = document.getElementById("players");
+              displayPlayers.innerHTML = '';
+              var displayMap = document.getElementById("map");
+              displayMap.innerHTML = '';
+              var displayNpcs = document.getElementById("npcs");
+              displayNpcs.innerHTML = '';
+              document.getElementById('error-message').innerHTML = "There is not game at the moment";
             }
 
           }else{

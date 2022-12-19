@@ -60,30 +60,34 @@ class MapManager(threading.Thread):
                 message = message.value.decode()
                 msg = eval(message)
                 msg = aesEncryptDecrypt.decrypt(msg, AESPassword)
-                msg = msg.decode()
-                # Separar partes del mensaje procedente del servidor
-                msg = msg.split(SEPARADOR)
-                receiver = msg[1]
-                if receiver == 'ALL' or receiver == 'NPC' or receiver == ALIAS.upper():
-                    mensaje = msg[2]
-                    if mensaje == 'START':
-                        print("START")
-                    elif mensaje == 'END':
-                        # Senyal de muerte
-                        print("END GAME")
-                        END = True
-                        return
-                    elif mensaje == 'TIMEOUT':
-                        # Senyal de muerte
-                        print("TIME OUT, END GAME")
-                        END = True
-                        return
-                    elif mensaje == 'WIN':
-                        print("CHAMPION! END GAME")
-                        END = True
-                        return
+                if msg is not None:
+                    msg = msg.decode()
+                    # Separar partes del mensaje procedente del servidor
+                    msg = msg.split(SEPARADOR)
+                    receiver = msg[1]
+                    if receiver == 'ALL' or receiver == 'NPC' or receiver == ALIAS.upper():
+                        mensaje = msg[2]
+                        if mensaje == 'START':
+                            print("START")
+                        elif mensaje == 'END':
+                            # Senyal de muerte
+                            print("END GAME")
+                            END = True
+                            return
+                        elif mensaje == 'TIMEOUT':
+                            # Senyal de muerte
+                            print("TIME OUT, END GAME")
+                            END = True
+                            return
+                        elif mensaje == 'WIN':
+                            print("CHAMPION! END GAME")
+                            END = True
+                            return
+                        else:
+                            print(mensaje)
                     else:
-                        print(mensaje)
+                        print("It is not possible to decrypt the message.")
+                        logging.info("It is not possible to decrypt the message.")
         except Exception as e:
             consumer.close()
             logging.error(f"ERROR in MapManager: {e}")
@@ -111,7 +115,7 @@ class MovementManager(threading.Thread):
             msg = ALIAS.upper() + SEPARADOR + 'has entered'
             message = aesEncryptDecrypt.encrypt(msg, AESPassword)
             producer.send('toserver', str(message).encode())
-            producer.flush()
+            # producer.flush()
             global END
             while not END:
                 rand = random.randint(0, 7)
@@ -123,7 +127,7 @@ class MovementManager(threading.Thread):
                 # Envia a kafka topic: toserver, mensaje
                 message = aesEncryptDecrypt.encrypt(msg, AESPassword)
                 producer.send('toserver', str(message).encode())
-                producer.flush()
+                # producer.flush()
 
                 # Espera un segundo antes volver a realizar el bucle y generar nuevo movimiento
                 time.sleep(5)

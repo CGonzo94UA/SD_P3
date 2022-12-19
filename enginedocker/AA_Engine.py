@@ -257,15 +257,19 @@ class ReadMovements(threading.Thread):
             message = message.value.decode()
             msg = eval(message)
             msg = aesEncryptDecrypt.decrypt(msg, AESPassword)
-            msg = msg.decode()
-            # Se procesa mensaje y se envia a todos
-            self.processmsg(msg)
-            # Comprueba si hay un jugador solo y es el ganador
-            if self.checkwin():
-                return
-            # Comprueba si quedan jugadores vivos
-            if self.checkgame():
-                return
+            if msg is not None:
+                msg = msg.decode()
+                # Se procesa mensaje y se envia a todos
+                self.processmsg(msg)
+                # Comprueba si hay un jugador solo y es el ganador
+                if self.checkwin():
+                    return
+                # Comprueba si quedan jugadores vivos
+                if self.checkgame():
+                    return
+            else:
+                print("It is not possible to decrypt the message.")
+                logging.info("It is not possible to decrypt the message.")
 
     def checkgame(self):
         global GAME
@@ -530,7 +534,7 @@ def sendmessage(kafkaproducer, receiver, message):
     msg = 'SERVER' + SEPARADOR + receiver + SEPARADOR + message
     message = aesEncryptDecrypt.encrypt(msg, AESPassword)
     kafkaproducer.send('fromserver', str(message).encode())
-    kafkaproducer.flush()
+    # kafkaproducer.flush()
 
 
 def randomposition():
@@ -614,8 +618,8 @@ def initializeGameTable():
     try:
         con = mysql.connector.connect(**config)
         cur = con.cursor()
-        sentence = "INSERT INTO Game (id, map, stamp, cities, quadrants) VALUES (%s, %s, NOW(), %s, %s);"
-        args = (engineId, str(MAPA), str(CITIES), str(QUADRANTS))
+        sentence = "INSERT INTO Game (id, stamp, cities, quadrants) VALUES (%s, NOW(), %s, %s);"
+        args = (engineId, str(CITIES), str(QUADRANTS))
         cur.execute(sentence, args)
         con.commit()
         logging.info('SAVE SUCCESSFULLY')
@@ -897,7 +901,7 @@ def assignemoji(player):
     emoji = CHARACTERS[n]
 
     while checkemoji(emoji):
-        n = random.randint(0, len(CHARACTERS)-1)
+        n = random.randint(0, len(CHARACTERS))
         emoji = CHARACTERS[n]
 
     EMOJIS[player] = emoji
@@ -1034,7 +1038,7 @@ def timeouttofinish():
     sendmsg = 'SERVER' + SEPARADOR + msg
     message = aesEncryptDecrypt.encrypt(sendmsg, AESPassword)
     producer.send('toserver', str(message).encode())
-    producer.flush()
+    # producer.flush()
     resetmaptable()
 
 
